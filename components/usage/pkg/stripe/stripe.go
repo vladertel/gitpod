@@ -190,6 +190,12 @@ func (c *Client) updateUsageForCustomer(ctx context.Context, customer *stripe.Cu
 func (c *Client) GetCustomerByAttributionID(ctx context.Context, attributionID string) (*stripe.Customer, error) {
 	customers, err := c.findCustomers(ctx, fmt.Sprintf("metadata['attributionId']:'%s'", attributionID))
 	if err != nil {
+		if stripeErr, ok := err.(*stripe.Error); ok {
+			if stripeErr.Code == stripe.ErrorCodeRateLimit {
+				return nil, status.Errorf(codes.ResourceExhausted, "stripe rate limit exceeded")
+			}
+		}
+
 		return nil, status.Errorf(codes.Internal, "failed to find customers: %v", err)
 	}
 

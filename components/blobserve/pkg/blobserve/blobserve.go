@@ -182,7 +182,7 @@ func (reg *Server) serve(w http.ResponseWriter, req *http.Request) {
 			http.Error(w, "internal server error", http.StatusInternalServerError)
 		}
 	}()
-
+	log.WithField("path", req.URL.Path).WithField("time", time.Now().UTC().UnixMilli()).Info(">>>> handling blobserve 1")
 	vars := mux.Vars(req)
 	image := vars["image"]
 	pref, err := reference.ParseNamed(image)
@@ -230,7 +230,7 @@ func (reg *Server) serve(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	log.WithField("path", req.URL.Path).Debug("handling blobserve")
+	log.WithField("path", req.URL.Path).WithField("time", time.Now().UTC().UnixMilli()).Info(">>>> handling blobserve 2")
 	pathPrefix := fmt.Sprintf("/%s", ref)
 	if req.URL.Path == pathPrefix {
 		req.URL.Path += "/"
@@ -279,10 +279,12 @@ func (reg *Server) serve(w http.ResponseWriter, req *http.Request) {
 		}
 
 		http.ServeContent(w, req, stat.Name(), stat.ModTime(), content)
+		log.WithField("path", req.URL.Path).WithField("time", time.Now().UTC().UnixMilli()).Info(">>>> handling blobserve 3")
 		return
 	}
 
 	http.StripPrefix(pathPrefix, http.FileServer(fs)).ServeHTTP(w, req)
+	log.WithField("path", req.URL.Path).WithField("time", time.Now().UTC().UnixMilli()).Info(">>>> handling blobserve 3")
 }
 
 func inlineVars(req *http.Request, r io.ReadSeeker, inlineReplacements []InlineReplacement) (io.ReadSeeker, error) {

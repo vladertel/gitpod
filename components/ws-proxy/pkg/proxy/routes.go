@@ -494,6 +494,7 @@ func logRouteHandlerHandler(routeHandlerName string) mux.MiddlewareFunc {
 	return func(h http.Handler) http.Handler {
 		return http.HandlerFunc(func(resp http.ResponseWriter, req *http.Request) {
 			getLog(req.Context()).WithField("routeHandler", routeHandlerName).Debug("hit route handler")
+			getLog(req.Context()).WithField("routeHandler", routeHandlerName).WithField("time", time.Now().UTC().UnixMilli()).Info("hit route handler")
 			h.ServeHTTP(resp, req)
 		})
 	}

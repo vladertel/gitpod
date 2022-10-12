@@ -15,6 +15,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime/debug"
+	"strconv"
 	"strings"
 	"time"
 
@@ -230,7 +231,7 @@ func (reg *Server) serve(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	log.WithField("path", req.URL.Path).WithField("time", time.Now().UTC().UnixMilli()).Info(">>>> handling blobserve 2")
+	log.WithField("path", req.URL.Path).WithField("timeStr", strconv.FormatInt(time.Now().UTC().UnixMilli(), 10)).Info(">>>> handling blobserve 2")
 	pathPrefix := fmt.Sprintf("/%s", ref)
 	if req.URL.Path == pathPrefix {
 		req.URL.Path += "/"

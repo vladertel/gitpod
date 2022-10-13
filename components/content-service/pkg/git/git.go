@@ -330,7 +330,7 @@ func (c *Client) Clone(ctx context.Context) (err error) {
 		log.WithError(err).Error("cannot create clone location")
 	}
 
-	args := []string{"--filter=blob:none", c.RemoteURI}
+	args := []string{"--filter=blob:none", "--also-filter-submodules", "--recurse-submodules", c.RemoteURI}
 
 	for key, value := range c.Config {
 		args = append(args, "--config")

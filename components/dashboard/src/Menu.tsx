@@ -387,7 +387,7 @@ export default function Menu() {
     return (
         <>
             <header className="app-container flex flex-col pt-4 space-y-4" data-analytics='{"button_type":"menu"}'>
-                <div className="flex h-10 mb-3">
+                <div className="flex h-10">
                     <div className="flex justify-between items-center pr-3">
                         <Link to="/">
                             <img src={gitpodIcon} className="h-6" alt="Gitpod's logo" />

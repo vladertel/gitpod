@@ -5,6 +5,7 @@
 package server
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -82,6 +83,11 @@ func register(srv *baseserver.Server, connPool proxy.ServerConnectionPool) error
 	proxy.RegisterMetrics(srv.MetricsRegistry())
 
 	handlerOptions := []connect.HandlerOption{
+		connect.WithRecover(func(ctx context.Context, s connect.Spec, h http.Header, recovered any) error {
+			log.WithField("call", s.Procedure).WithField("recovered_error", recovered).Errorf("Recovered panic during API call to %s", s.Procedure)
+
+			return connect.NewError(connect.CodeInternal, fmt.Errorf("internal server error occured"))
+		}),
 		connect.WithInterceptors(
 			auth.NewServerInterceptor(),
 		),

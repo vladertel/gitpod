@@ -1525,9 +1525,6 @@ data:
             "userNamespaces": {
               "seccompProfileInstaller": {
                 "version": "test"
-              },
-              "shiftfsModuleLoader": {
-                "version": "test"
               }
             }
           },
@@ -7030,7 +7027,6 @@ spec:
     metadata:
       annotations:
         gitpod.io/checksum_config: b16f1014837e91b50bf4b9d18e29a1c41adf08d502dee1bcc035987eb0810c5a
-        seccomp.security.alpha.kubernetes.io/shiftfs-module-loader: unconfined
       creationTimestamp: null
       labels:
         app: gitpod

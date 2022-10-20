@@ -15,7 +15,7 @@ import (
 	"github.com/containerd/containerd/content"
 	"github.com/containerd/containerd/errdefs"
 	"github.com/gitpod-io/gitpod/common-go/log"
-	redis "github.com/go-redis/redis/v8"
+	"github.com/go-redis/redis/v9"
 	files "github.com/ipfs/go-ipfs-files"
 	ipfs "github.com/ipfs/interface-go-ipfs-core"
 	"github.com/ipfs/interface-go-ipfs-core/options"

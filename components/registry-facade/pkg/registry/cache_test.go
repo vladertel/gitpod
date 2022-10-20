@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/containerd/containerd/content"
-	redis "github.com/go-redis/redis/v8"
+	"github.com/go-redis/redis/v9"
 	"github.com/go-redis/redismock/v8"
 	"github.com/google/go-cmp/cmp"
 	"github.com/opencontainers/go-digest"

@@ -9,7 +9,7 @@ import (
 	"encoding/json"
 
 	"github.com/containerd/containerd/remotes"
-	redis "github.com/go-redis/redis/v8"
+	"github.com/go-redis/redis/v9"
 	ociv1 "github.com/opencontainers/image-spec/specs-go/v1"
 )
 

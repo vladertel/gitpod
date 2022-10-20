@@ -26,6 +26,10 @@ type ServedPort struct {
 	Address          net.IP
 	Port             uint32
 	BoundToLocalhost bool
+	Inode            uint32
+	PID              uint32
+	Cmdline          string
+	Cwd              string
 }
 
 // ServedPortsObserver observes the locally served ports and provides
@@ -191,4 +195,64 @@ func fromHexChar(c byte) uint8 {
 		return c - 'A' + 10
 	}
 	return 0
+}
+
+// getCmdline returns the command line of the process with the given pid.
+func getCmdline(pid uint32) (string, error) {
+	b, err := os.ReadFile(fmt.Sprintf("/proc/%d/cmdline", pid))
+	if err != nil {
+		return "", err
+	}
+	return string(b), nil
+}
+
+// getCwd returns the current working directory of the process with the given pid.
+func getCwd(pid uint32) (string, error) {
+	f, err := os.Readlink(fmt.Sprintf("/proc/%d/cwd", pid))
+	if err != nil {
+		return "", err
+	}
+	return f, nil
+}
+
+// getSocketPidMap from /proc/*/fd/* to get the pid of the process that opened the socket
+func getSocketPidMap() (socketMap map[uint32]uint32) {
+	socketMap = make(map[uint32]uint32)
+	procDir, err := os.Open("/proc")
+	if err != nil {
+		return
+	}
+	defer procDir.Close()
+
+	procDirs, err := procDir.Readdirnames(0)
+	if err != nil {
+		return socketMap
+	}
+	for _, proc := range procDirs {
+		procNum, err := strconv.Atoi(proc)
+		if err != nil {
+			continue
+		}
+		fdDir, err := os.Open("/proc/" + proc + "/fd")
+		if err != nil {
+			continue
+		}
+		fdDirs, err := fdDir.Readdirnames(0)
+		if err != nil {
+			continue
+		}
+
+		for _, fd := range fdDirs {
+			link, err := os.Readlink("/proc/" + proc + "/fd/" + fd)
+			if err != nil {
+				continue
+			}
+			if strings.HasPrefix(link, "socket:") {
+				if inode, err := strconv.ParseInt(link[8:len(link)-1], 10, 32); err == nil {
+					socketMap[uint32(inode)] = uint32(procNum)
+				}
+			}
+		}
+	}
+	return
 }

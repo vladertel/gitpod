@@ -2,6 +2,8 @@
   "name": "@gitpod/public-api",
   "version": "0.1.5",
   "license": "UNLICENSED",
+  "main": "./lib/gitpod/experimental/v1/index.js",
+  "types": "./lib/gitpod/experimental/v1/index.d.ts",
   "files": [
     "lib"
   ],

@@ -336,14 +336,12 @@ export class WorkspaceStarter {
 
             // check if there has been an instance before, i.e. if this is a restart
             const pastInstances = await this.workspaceDb.trace({ span }).findInstances(workspace.id);
-            const hasValidBackup = pastInstances.some(
+            const validBackups = pastInstances.filter(
                 (i) => !!i.status && !!i.status.conditions && !i.status.conditions.failed,
             );
             let lastValidWorkspaceInstance: WorkspaceInstance | undefined;
-            if (hasValidBackup) {
-                lastValidWorkspaceInstance = pastInstances.reduce((previousValue, currentValue) =>
-                    currentValue.creationTime > previousValue.creationTime ? currentValue : previousValue,
-                );
+            if (validBackups.length !== 0) {
+                lastValidWorkspaceInstance = validBackups[validBackups.length - 1];
             }
 
             const ideConfig = await this.ideService.getIDEConfig();

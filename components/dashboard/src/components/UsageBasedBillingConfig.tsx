@@ -20,6 +20,7 @@ import DropDown from "../components/DropDown";
 import Modal from "../components/Modal";
 import Alert from "./Alert";
 import dayjs from "dayjs";
+import { ErrorCodes } from "@gitpod/gitpod-protocol/lib/messaging/error";
 
 const BASE_USAGE_LIMIT_FOR_STRIPE_USERS = 1000;
 
@@ -510,7 +511,14 @@ function CreditCardInputForm(props: { attributionId: string }) {
             }
         } catch (error) {
             console.error("Failed to submit form.", error);
-            setErrorMessage(`Failed to submit form. ${error?.message || String(error)}`);
+            let message = `Failed to submit form. ${error?.message || String(error)}`;
+            if (error?.code === ErrorCodes.SUBSCRIPTION_ERROR) {
+                message =
+                    error?.data?.hint === "currency"
+                        ? `Changing currency is currently not supported. Please contact support@gitpod.io`
+                        : "Failed to subscribe. Please contact support@gitpod.io";
+            }
+            setErrorMessage(message);
         } finally {
             setIsLoading(false);
         }

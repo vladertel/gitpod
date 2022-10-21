@@ -116,7 +116,11 @@ import { EntitlementService, MayStartWorkspaceResult } from "../../../src/billin
 import { BillingMode } from "@gitpod/gitpod-protocol/lib/billing-mode";
 import { BillingModes } from "../billing/billing-mode";
 import { UsageServiceDefinition } from "@gitpod/usage-api/lib/usage/v1/usage.pb";
-import { BillingServiceClient, BillingServiceDefinition } from "@gitpod/usage-api/lib/usage/v1/billing.pb";
+import {
+    BillingServiceClient,
+    BillingServiceDefinition,
+    StripeCustomer,
+} from "@gitpod/usage-api/lib/usage/v1/billing.pb";
 import { IncrementalPrebuildsService } from "../prebuilds/incremental-prebuilds-service";
 import { ConfigProvider } from "../../../src/workspace/config-provider";
 
@@ -2140,12 +2144,27 @@ export class GitpodServerEEImpl extends GitpodServerImpl {
 
         const billingEmail = User.getPrimaryEmail(user);
         const billingName = attrId.kind === "team" ? team!.name : User.getName(user);
+
         try {
+            let customer: StripeCustomer | undefined;
             try {
+                customer = (await this.billingService.getStripeCustomer({ attributionId })).customer;
+            } catch (e) {
+                console.error(e);
+            }
+            if (customer) {
+                // NOTE: this is a temporary workaround, as long as we're not automatically re-create the customer
+                // entity on Stripe to support a switch of currencies, we're taking an exit here.
+                if (customer.currency !== currency) {
+                    throw new ResponseError(
+                        ErrorCodes.SUBSCRIPTION_ERROR,
+                        `Cannot re-subscribe with a different currency. Please contact support.`,
+                        { hint: "currency", oldValue: customer.currency, value: currency },
+                    );
+                }
                 // customer already exists, we don't need to create a new one.
-                await this.billingService.getStripeCustomer({ attributionId });
                 return;
-            } catch (e) {}
+            }
 
             await this.billingService.createStripeCustomer({
                 attributionId,

@@ -48,6 +48,11 @@ export class GitpodTableDescriptionProvider implements TableDescriptionProvider 
     readonly name = "gitpod";
     protected readonly tables: TableDescription[] = [
         {
+            name: "d_b_workspace_cluster",
+            primaryKeys: ["name", "applicationCluster"],
+            timeColumn: "_lastModified",
+        },
+        {
             name: "d_b_oauth_auth_code_entry",
             primaryKeys: ["id"],
             timeColumn: "_lastModified",

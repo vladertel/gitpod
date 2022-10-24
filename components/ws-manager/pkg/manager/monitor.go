@@ -440,43 +440,58 @@ func actOnPodEvent(ctx context.Context, m actingManager, manager *Manager, statu
 		}
 
 		span.LogKV("disposalStatusAnnotation", ds)
-		if terminated && !ds.Status.IsDisposed() {
-			if wso.Pod.Annotations[workspaceFailedBeforeStoppingAnnotation] == util.BooleanTrueString && wso.Pod.Annotations[workspaceNeverReadyAnnotation] == util.BooleanTrueString {
-				span.LogKV("event", "failed before stopping and never ready")
-				// The workspace is never ready, so there is no need for a finalizer.
-				if _, ok := pod.Annotations[workspaceExplicitFailAnnotation]; !ok {
-					failMessage := status.Conditions.Failed
-					if failMessage == "" {
-						failMessage = "workspace failed to start."
-					}
-					err := m.markWorkspace(ctx, workspaceID, addMark(workspaceExplicitFailAnnotation, failMessage))
-					if err != nil {
-						log.WithError(err).Error("was unable to mark workspace as failed")
-					}
-				}
+		if !terminated {
+			return nil
+		}
 
-				// delete PVC because the workspace pod is never ready
-				if err = manager.deleteWorkspacePVC(ctx, pod.Name); err != nil {
-					log.Error(err)
-					return err
-				}
-				return m.modifyFinalizer(ctx, workspaceID, gitpodFinalizerName, false)
-			} else if wso.Pod.Annotations[abortRequestAnnotation] == util.BooleanTrueString {
-				span.LogKV("event", "workspace was aborted")
-				// The workspace is aborted, so there is no need to finalize content
-				if err = manager.deleteWorkspacePVC(ctx, pod.Name); err != nil {
-					log.Error(err)
-					return err
-				}
-				return m.modifyFinalizer(ctx, workspaceID, gitpodFinalizerName, false)
-			} else {
-				// We start finalizing the workspace content only after the container is gone. This way we ensure there's
-				// no process modifying the workspace content as we create the backup.
-				go m.finalizeWorkspaceContent(ctx, wso)
+		if ds.Status.IsDisposed() {
+			if err = manager.deleteWorkspacePVC(ctx, pod.Name); err != nil {
+				log.Error(err)
+				return err
 			}
 		}
 
+		if wso.Pod.Annotations[workspaceFailedBeforeStoppingAnnotation] == util.BooleanTrueString && wso.Pod.Annotations[workspaceNeverReadyAnnotation] == util.BooleanTrueString {
+			span.LogKV("event", "failed before stopping and never ready")
+			// The workspace is never ready, so there is no need for a finalizer.
+			if _, ok := pod.Annotations[workspaceExplicitFailAnnotation]; !ok {
+				failMessage := status.Conditions.Failed
+				if failMessage == "" {
+					failMessage = "workspace failed to start."
+				}
+				err := m.markWorkspace(ctx, workspaceID, addMark(workspaceExplicitFailAnnotation, failMessage))
+				if err != nil {
+					log.WithError(err).Error("was unable to mark workspace as failed")
+				}
+			}
+
+			// delete PVC because the workspace pod is never ready
+			if err = manager.deleteWorkspacePVC(ctx, pod.Name); err != nil {
+				log.Error(err)
+				return err
+			}
+			return m.modifyFinalizer(ctx, workspaceID, gitpodFinalizerName, false)
+		} else if wso.Pod.Annotations[abortRequestAnnotation] == util.BooleanTrueString {
+			span.LogKV("event", "workspace was aborted")
+			// The workspace is aborted, so there is no need to finalize content
+			if err = manager.deleteWorkspacePVC(ctx, pod.Name); err != nil {
+				log.Error(err)
+				return err
+			}
+			return m.modifyFinalizer(ctx, workspaceID, gitpodFinalizerName, false)
+		} else {
+			// We start finalizing the workspace content only after the container is gone. This way we ensure there's
+			// no process modifying the workspace content as we create the backup.
+			go m.finalizeWorkspaceContent(ctx, wso)
+		}
+
 	case api.WorkspacePhase_STOPPED:
+		// delete PVC because the workspace pod is stopped
+		if err = manager.deleteWorkspacePVC(ctx, pod.Name); err != nil {
+			log.Error(err)
+			return err
+		}
+
 		// we've disposed already - try to remove the finalizer and call it a day
 		return m.modifyFinalizer(ctx, workspaceID, gitpodFinalizerName, false)
 	}

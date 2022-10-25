@@ -277,4 +277,3 @@ export class CreateTeamResponse extends Message<CreateTeamResponse> {
     return proto3.util.equals(CreateTeamResponse, a, b);
   }
 }
-

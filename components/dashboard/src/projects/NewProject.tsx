@@ -21,6 +21,7 @@ import { trackEvent } from "../Analytics";
 import exclamation from "../images/exclamation.svg";
 import ErrorMessage from "../components/ErrorMessage";
 import Spinner from "../icons/Spinner.svg";
+import { teamsService } from "../service/public-api";
 
 export default function NewProject() {
     const location = useLocation();
@@ -729,6 +730,26 @@ function NewTeam(props: { onSuccess: (team: Team) => void }) {
         if (!teamName) {
             return;
         }
+
+        try {
+            const response = await teamsService.createTeam({
+                name: teamName,
+            });
+            const team = response.team;
+            setTeams(await getGitpodService().server.getTeams());
+
+            const mappedTeam: Team = {
+                id: team?.id || "",
+                name: team?.name || "",
+                slug: team?.slug || "",
+                creationTime: "",
+            };
+            props.onSuccess(mappedTeam);
+            return;
+        } catch (error) {
+            console.error(error);
+        }
+
         try {
             const team = await getGitpodService().server.createTeam(teamName);
             setTeams(await getGitpodService().server.getTeams());

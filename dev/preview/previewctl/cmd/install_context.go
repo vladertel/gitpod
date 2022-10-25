@@ -6,7 +6,9 @@ package cmd
 
 import (
 	"context"
+	"fmt"
 	"github.com/gitpod-io/gitpod/previewctl/pkg/k8s"
+	"github.com/gitpod-io/gitpod/previewctl/pkg/preview"
 	"time"
 
 	"github.com/sirupsen/logrus"
@@ -28,7 +30,13 @@ func installContextCmd(logger *logrus.Logger) *cobra.Command {
 				return err
 			}
 
-			return k.PortForward(context.Background(), "proxy", "2200")
+			previewName, err := preview.GetName("")
+			if err != nil {
+				return err
+			}
+
+			//return k.PortForward(context.Background(), "virt-launcher-aa-k3s-install-tpmxg", fmt.Sprintf("preview-%s", ns), "2200")
+			return k.PortForward(context.Background(), previewName, fmt.Sprintf("preview-%s", previewName), "2200")
 
 			return nil
 		},

@@ -8,6 +8,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/client-go/tools/portforward"
 	"k8s.io/client-go/transport/spdy"
 	"net/http"
@@ -55,14 +56,41 @@ func (c *Config) GetHarvesterKubeConfig(ctx context.Context) (*api.Config, error
 	return RenameContext(config, "default", "harvester")
 }
 
-func (c *Config) PortForward(ctx context.Context, name, port string) error {
+func (c *Config) getVMPodName(ctx context.Context, name, namespace string) (string, error) {
+	labelSelector := metav1.LabelSelector{
+		MatchLabels: map[string]string{
+			"harvesterhci.io/vmName": name,
+		},
+	}
+
+	pods, err := c.coreClient.CoreV1().Pods(namespace).List(ctx, metav1.ListOptions{
+		LabelSelector: labels.Set(labelSelector.MatchLabels).String(),
+	})
+
+	if err != nil {
+		return "", err
+	}
+
+	if len(pods.Items) != 1 {
+		return "", errors.Newf("expected a single pod, got [%d]", len(pods.Items))
+	}
+
+	return pods.Items[0].Name, nil
+}
+
+func (c *Config) PortForward(ctx context.Context, name, namespace, port string) error {
 	roundTripper, upgrader, err := spdy.RoundTripperFor(c.config)
 	if err != nil {
 		panic(err)
 	}
 
-	path := fmt.Sprintf("/api/v1/namespaces/%s/services/%s/portforward", "default", name)
-	hostIP := strings.TrimLeft(c.config.Host, "https:/")
+	podName, err := c.getVMPodName(ctx, name, namespace)
+	if err != nil {
+		return err
+	}
+
+	path := fmt.Sprintf("/api/v1/namespaces/%s/pods/%s/portforward", namespace, podName)
+	hostIP := strings.TrimLeft(c.config.Host, "https://")
 	serverURL := url.URL{Scheme: "https", Path: path, Host: hostIP}
 
 	dialer := spdy.NewDialer(upgrader, &http.Client{Transport: roundTripper}, http.MethodPost, &serverURL)

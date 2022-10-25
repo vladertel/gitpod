@@ -11,7 +11,7 @@ packages:
       - mocha.opts
     config:
       packaging: library
-      dontTest: false
+      dontTest: true
       commands:
         build: ["yarn", "build"]
       yarnLock: ${coreYarnLockBase}/../yarn.lock

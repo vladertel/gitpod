@@ -1,0 +1,12 @@
+packages:
+  - name: lib
+    type: yarn
+    srcs:
+      - ./*.js
+      - package.json
+    config:
+      packaging: library
+      dontTest: false
+      commands:
+        build: ["yarn", "build"]
+      yarnLock: ${coreYarnLockBase}/yarn.lock

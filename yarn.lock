@@ -2502,12 +2502,24 @@
   resolved "https://registry.npmjs.org/@testdeck/core/-/core-0.1.2.tgz"
   integrity sha512-rggcFQqSejqtkqK1JcwZE/utD4oNsM1JMHwrYxH1PKYx0uL2cMs0Q4zMVLKw0oacIASCfkIUSdXx7rDNdCDlvA==
 
+"@testdeck/core@^0.2.1":
+  version "0.2.1"
+  resolved "https://registry.yarnpkg.com/@testdeck/core/-/core-0.2.1.tgz#af72dbd2afb0ebfd4ad03e0a59f2d85e0035d55b"
+  integrity sha512-eMO5LKxCN8/fST2RTrxo6+1rmwT4ZGN3giwaEeD94d8o4FoHk5Xp1SWGZeqYu/M8jfHpCN2MTKQO9viIBPVBAQ==
+
 "@testdeck/mocha@0.1.2":
   version "0.1.2"
   resolved "https://registry.npmjs.org/@testdeck/mocha/-/mocha-0.1.2.tgz"
   integrity sha512-yn3OkFUlO9EkdBkDV08bPV0r26U2FC/8KvU9FdiS0ligOsjB5Ry4sp3eUQJAFxjrGJBpih0t7rZ/GzdsgCv/EQ==
   dependencies:
     "@testdeck/core" "^0.1.2"
+
+"@testdeck/mocha@^0.2.1":
+  version "0.2.1"
+  resolved "https://registry.yarnpkg.com/@testdeck/mocha/-/mocha-0.2.1.tgz#661c4a5635727a57f856c3a0fb6c6115b49690f8"
+  integrity sha512-8sC4spvA8hlpMIPweohvJ5fBH31TonXuF2X2YTa7NV99BPkvM6GRchyAjOtYgdqVfIwolio5C7iP+gDH/dss4A==
+  dependencies:
+    "@testdeck/core" "^0.2.1"
 
 "@testing-library/cypress@^8.0.2":
   version "8.0.2"

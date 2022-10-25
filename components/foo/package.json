@@ -1,0 +1,16 @@
+{
+  "name": "foo",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "build": "echo hello world",
+    "test": "mocha './*.spec.js' --exclude './node_modules/**'"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "@testdeck/mocha": "^0.2.1"
+  }
+}

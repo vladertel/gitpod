@@ -26,8 +26,12 @@ var (
 )
 
 type Config struct {
+	harvester
+	harvesterPreview
+
 	coreClient    kubernetes.Interface
 	dynamicClient dynamic.Interface
+	config        *rest.Config
 
 	logger *logrus.Logger
 }
@@ -40,6 +44,7 @@ func NewWithConfig(logger *logrus.Logger, config *rest.Config) (*Config, error) 
 		coreClient:    coreClient,
 		dynamicClient: dynamicClient,
 		logger:        logger,
+		config:        config,
 	}, nil
 }
 
@@ -56,6 +61,7 @@ func NewFromDefaultConfigWithContext(logger *logrus.Logger, contextName string) 
 		coreClient:    coreClient,
 		dynamicClient: dynamicClient,
 		logger:        logger,
+		config:        kconf,
 	}, nil
 }
 

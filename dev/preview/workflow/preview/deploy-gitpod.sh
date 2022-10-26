@@ -17,21 +17,15 @@ HARVESTER_KUBE_CONTEXT="harvester"
 INSTALLATION_NAMESPACE="default"
 
 VERSION="${VERSION:-$(preview-name-from-branch)-dev}"
-INSTALLER_HASH=$(
-    leeway describe install/installer:app \
-        -DSEGMENT_IO_TOKEN="$(kubectl --context=dev -n werft get secret self-hosted -o jsonpath='{.data.segmentIOToken}' | base64 -d)" \
-        -DREPLICATED_API_TOKEN="$(kubectl --context=dev -n werft get secret replicated -o jsonpath='{.data.token}' | base64 -d)" \
-        -DREPLICATED_APP="$(kubectl --context=dev -n werft get secret replicated -o jsonpath='{.data.app}' | base64 -d)" \
-        -Dversion="${VERSION}" \
-        --format=json \
-    | jq -r '.metadata.version'
-)
-
-# TODO: Maybe use /tmp/installer so that it can be used in the rest of Werft too.
 INSTALLER_CONFIG_PATH="${INSTALLER_CONFIG_PATH:-$(mktemp "/tmp/XXXXXX.gitpod.config.yaml")}"
 
 # Using /tmp/installer as that's what Werft expects (for now)
-cp "/tmp/build/install-installer--app.$INSTALLER_HASH/installer" /tmp/installer
+docker run \
+    --entrypoint sh \
+    --rm \
+    --pull=always \
+    "eu.gcr.io/gitpod-core-dev/build/installer:${VERSION}" -c "cat /app/installer" \
+> /tmp/installer
 
 function installer {
     /tmp/installer "$@"
@@ -154,10 +148,9 @@ for row in $(kubectl --kubeconfig "$DEV_KUBE_PATH" --context=${DEV_KUBE_CONTEXT}
 | base64 -d -w 0 \
 | yq r - authProviders -j \
 | jq -r 'to_entries | .[] | @base64'); do
-    key=$(echo "$row "| base64 -d | jq -r '.key')
+    key=$(echo "${row}" | base64 -d | jq -r '.key')
     providerId=$(echo "$row" | base64 -d | jq -r '.value.id | ascii_downcase')
     data=$(echo "$row" | base64 -d | yq r - value --prettyPrint)
-
     yq w -i "${INSTALLER_CONFIG_PATH}" authProviders["$key"].kind "secret"
     yq w -i "${INSTALLER_CONFIG_PATH}" authProviders["$key"].name "$providerId"
 

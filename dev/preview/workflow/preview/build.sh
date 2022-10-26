@@ -69,4 +69,4 @@ leeway build \
     -Dversion="${VERSION}" \
     --dont-retag \
     --dont-test \
-    install/installer:app
+    install/installer:docker

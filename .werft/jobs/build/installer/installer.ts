@@ -47,6 +47,7 @@ export class Installer {
             .map(([key, value]) => `${key}="${value}"`)
             .join(" ")
         exec(`${variables} leeway run dev/preview:deploy-gitpod`, {slice: slice})
+        this.options.werft.done(slice);
     }
 
     render(slice: string): void {

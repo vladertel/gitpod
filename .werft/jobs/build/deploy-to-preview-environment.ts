@@ -304,7 +304,7 @@ async function deployToDevWithInstaller(
 
     const installer = new Installer({
         werft: werft,
-        installerConfigPath: "config.yaml",
+        installerConfigPath: "/tmp/config.yaml",
         kubeconfigPath: deploymentKubeconfig,
         version: version,
         proxySecretName: PROXY_SECRET_NAME,

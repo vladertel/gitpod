@@ -6,7 +6,7 @@
 
 import { injectable, inject } from "inversify";
 import { ConsensusLeaderQorum } from "../consensus/consensus-leader-quorum";
-import { Disposable } from "@gitpod/gitpod-protocol";
+import { Disposable, VolumeSnapshotWithWSType } from "@gitpod/gitpod-protocol";
 import { log } from "@gitpod/gitpod-protocol/lib/util/logging";
 import { WorkspaceDeletionService } from "./workspace-deletion-service";
 import * as opentracing from "opentracing";
@@ -169,20 +169,33 @@ export class WorkspaceGarbageCollector {
             const workspaces = await this.workspaceDB
                 .trace({ span })
                 .findVolumeSnapshotWorkspacesForGC(this.config.workspaceGarbageCollection.chunkLimit);
-            const volumeSnapshots = await Promise.all(
-                workspaces.map((ws) =>
-                    this.workspaceDB
+            const volumeSnapshotsWithWSPromise = await Promise.all(
+                workspaces.map((ws) => {
+                    let vss = this.workspaceDB
                         .trace({ span })
-                        .findVolumeSnapshotForGCByWorkspaceId(ws, this.config.workspaceGarbageCollection.chunkLimit),
-                ),
+                        .findVolumeSnapshotForGCByWorkspaceId(ws, this.config.workspaceGarbageCollection.chunkLimit);
+                    return { ws, vss };
+                }),
             );
-
-            await Promise.all(
-                volumeSnapshots.map((vss) =>
+            for (const { ws, vss } of volumeSnapshotsWithWSPromise) {
+                const volumeSnapshots = await vss;
+                // we need full workspace object to get its type
+                let fullWS = await this.workspaceDB.trace({ span }).findById(ws);
+                if (!fullWS) {
+                    throw new Error(`Workspace ${ws} not found while looking for outdated volume snapshots`);
+                }
+                let wsType = fullWS.type;
+                await Promise.all(
                     // skip the first volume snapshot, as it is most recent, and then pass the rest into deletion
-                    vss.slice(1).map((vs) => this.deletionService.garbageCollectVolumeSnapshot({ span }, vs)),
-                ),
-            );
+                    volumeSnapshots.slice(1).map((vs) => {
+                        let vswst: VolumeSnapshotWithWSType = {
+                            vs,
+                            wsType: wsType,
+                        };
+                        return this.deletionService.garbageCollectVolumeSnapshot({ span }, vswst);
+                    }),
+                );
+            }
         } catch (err) {
             TraceContext.setError({ span }, err);
             throw err;

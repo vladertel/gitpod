@@ -43,9 +43,7 @@ const installerSlices = {
     COPY_CERTIFICATES: "Copying certificates",
     CLEAN_ENV_STATE: "clean envirionment",
     SET_CONTEXT: "set namespace",
-    INSTALLER_INIT: "installer init",
-    PREVIEW_CONFIG: "Adding preview-specific configuration",
-    VALIDATE_CONFIG: "Validating configuration",
+    INSTALLER_CONFIG: "Generate and validate installer config",
     INSTALLER_RENDER: "installer render",
     INSTALLER_POST_PROCESSING: "installer post processing",
     APPLY_INSTALL_MANIFESTS: "installer apply",
@@ -72,7 +70,6 @@ export async function deployToPreviewEnvironment(werft: Werft, jobConfig: JobCon
         withObservability,
         installEELicense,
         workspaceFeatureFlags,
-        storage,
     } = jobConfig;
 
     const { destname, namespace } = jobConfig.previewEnvironment;
@@ -100,17 +97,6 @@ export async function deployToPreviewEnvironment(werft: Werft, jobConfig: JobCon
         imagePullAuth,
         withObservability,
     };
-
-    exec(
-        `kubectl --kubeconfig ${CORE_DEV_KUBECONFIG_PATH} --namespace keys get secret host-key -o yaml > /workspace/host-key.yaml`,
-    );
-
-    // Writing auth-provider configuration to disk prior to deploying anything.
-    // We do this because we have different auth-providers depending if we're using core-dev or Harvester VMs.
-    exec(
-        `kubectl --kubeconfig ${CORE_DEV_KUBECONFIG_PATH} get secret ${"preview-envs-authproviders-harvester"} --namespace=keys -o jsonpath="{.data.authProviders}" > auth-provider-secret.yml`,
-        { silent: true },
-    );
 
     // We set all attributes to false as default and only set it to true once the each process is complete.
     // We only set the attribute for jobs where a VM is expected.
@@ -222,7 +208,7 @@ export async function deployToPreviewEnvironment(werft: Werft, jobConfig: JobCon
         .finally(() => werft.done(sliceID));
 
     werft.phase(phases.DEPLOY, "deploying to dev with Installer");
-    await deployToDevWithInstaller(werft, jobConfig, deploymentConfig, workspaceFeatureFlags, storage);
+    await deployToDevWithInstaller(werft, deploymentConfig, workspaceFeatureFlags);
 }
 
 /*
@@ -230,10 +216,8 @@ export async function deployToPreviewEnvironment(werft: Werft, jobConfig: JobCon
  */
 async function deployToDevWithInstaller(
     werft: Werft,
-    jobConfig: JobConfig,
     deploymentConfig: DeploymentConfig,
-    workspaceFeatureFlags: string[],
-    storage,
+    workspaceFeatureFlags: string[]
 ) {
     // to test this function, change files in your workspace, sideload (-s) changed files into werft or set annotations (-a) like so:
     // werft run github -f -j ./.werft/build.yaml -s ./.werft/build.ts -s ./.werft/jobs/build/installer/post-process.sh -a with-clean-slate-deployment=true
@@ -336,14 +320,11 @@ async function deployToDevWithInstaller(
     });
     try {
         werft.log(phases.DEPLOY, "deploying using installer");
-        installer.init(installerSlices.INSTALLER_INIT);
-        installer.addPreviewConfiguration(installerSlices.PREVIEW_CONFIG);
-        installer.validateConfiguration(installerSlices.VALIDATE_CONFIG);
+        installer.generateAndValidateConfig(installerSlices.INSTALLER_CONFIG)
         installer.render(installerSlices.INSTALLER_RENDER);
         installer.postProcessing(installerSlices.INSTALLER_POST_PROCESSING);
         installer.install(installerSlices.APPLY_INSTALL_MANIFESTS);
     } catch (err) {
-        exec(`cat ${installer.options.installerConfigPath}`, { slice: phases.DEPLOY });
         werft.fail(phases.DEPLOY, err);
     }
 
@@ -356,30 +337,6 @@ async function deployToDevWithInstaller(
     addAgentSmithToken(werft, deploymentConfig.namespace, installer.options.kubeconfigPath, tokenHash);
 
     werft.done(phases.DEPLOY);
-}
-
-/*  A hash is caclulated from the branch name and a subset of that string is parsed to a number x,
-    x mod the number of different nodepool-sets defined in the files listed in nodeAffinityValues
-    is used to generate a pseudo-random number that consistent as long as the branchname persists.
-    We use it to reduce the number of preview-environments accumulating on a singe nodepool.
-*/
-export function getNodePoolIndex(namespace: string): number {
-    const nodeAffinityValues = getNodeAffinities();
-
-    return (
-        parseInt(createHash("sha256").update(namespace).digest("hex").substring(0, 5), 16) % nodeAffinityValues.length
-    );
-}
-
-function getNodeAffinities(): string[] {
-    return [
-        "values.nodeAffinities_1.yaml",
-        "values.nodeAffinities_2.yaml",
-        "values.nodeAffinities_0.yaml",
-        "values.nodeAffinities_3.yaml",
-        "values.nodeAffinities_4.yaml",
-        "values.nodeAffinities_5.yaml",
-    ];
 }
 
 interface DeploymentConfig {

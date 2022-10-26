@@ -151,6 +151,7 @@ class BillingModeSpec {
         function user(): User {
             return {
                 id: userId,
+                name: `user-${userId}`,
                 creationDate,
                 identities: [],
             };
@@ -306,6 +307,7 @@ class BillingModeSpec {
                 expectation: {
                     mode: "chargebee",
                     canUpgradeToUBB: true,
+                    teamNames: ["Team Subscription 'Team Unleashed' (owner: user-123)"],
                 },
             },
             {
@@ -322,6 +324,7 @@ class BillingModeSpec {
                 expectation: {
                     mode: "chargebee",
                     canUpgradeToUBB: true,
+                    teamNames: ["Team Subscription 'Team Unleashed' (owner: user-123)"],
                 },
             },
             {
@@ -455,6 +458,7 @@ class BillingModeSpec {
                 expectation: {
                     mode: "chargebee",
                     paid: true,
+                    teamNames: ["team-123"],
                 },
             },
             // team: transition chargebee -> UBB
@@ -469,6 +473,7 @@ class BillingModeSpec {
                 expectation: {
                     mode: "chargebee",
                     canUpgradeToUBB: true,
+                    teamNames: ["team-123"],
                 },
             },
             {

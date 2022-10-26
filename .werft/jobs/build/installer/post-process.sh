@@ -116,7 +116,7 @@ while [ "$documentIndex" -le "$DOCS" ]; do
       sed -i "$DEV_BRANCH_EXPR" /tmp/"$NAME"overrides.yaml
 
       # Stage
-      STAGE=$(yq r ./.werft/jobs/build/helm/values.dev.yaml installation.stage)
+      STAGE="devstaging"
       STAGE_EXPR="s/\"stage\": \"production\"/\"stage\": \"$STAGE\"/"
       sed -i "$STAGE_EXPR" /tmp/"$NAME"overrides.yaml
       # Install EE license, if it exists
@@ -167,7 +167,7 @@ while [ "$documentIndex" -le "$DOCS" ]; do
       touch /tmp/"$NAME"overrides.yaml
       yq r k8s.yaml -d "$documentIndex" data | yq prefix - data > /tmp/"$NAME"overrides.yaml
 
-      STAGING_HOST_NAME=$(yq r ./.werft/jobs/build/helm/values.dev.yaml hostname)
+      STAGING_HOST_NAME="staging.gitpod-dev.com"
       CURRENT_WS_HOST_NAME="ws.$DEV_BRANCH.$STAGING_HOST_NAME"
       NEW_WS_HOST_NAME="ws-$SHORT_NAME.$DEV_BRANCH.$STAGING_HOST_NAME"
 
@@ -213,7 +213,7 @@ while [ "$documentIndex" -le "$DOCS" ]; do
       yq r k8s.yaml -d "$documentIndex" data | yq prefix - data > /tmp/"$NAME"overrides.yaml
 
       # simliar to server, except the ConfigMap hierarchy, key, and value are different
-      STAGING_HOST_NAME=$(yq r ./.werft/jobs/build/helm/values.dev.yaml hostname)
+      STAGING_HOST_NAME="staging.gitpod-dev.com"
       CURRENT_WS_HOST_NAME="ws.$DEV_BRANCH.$STAGING_HOST_NAME"
       NEW_WS_HOST_NAME="ws-$SHORT_NAME.$DEV_BRANCH.$STAGING_HOST_NAME"
 

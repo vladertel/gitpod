@@ -1,7 +1,6 @@
 import * as fs from "fs";
 import { exec } from "../../../util/shell";
 import { Werft } from "../../../util/werft";
-import { getNodePoolIndex } from "../deploy-to-preview-environment";
 import { renderPayment } from "../payment/render";
 
 export type Analytics = {
@@ -121,11 +120,10 @@ export class Installer {
     }
 
     private process(slice: string): void {
-        const nodepoolIndex = getNodePoolIndex(this.options.deploymentNamespace);
         const flags = "WITH_VM=true ";
 
         exec(
-            `${flags}./.werft/jobs/build/installer/post-process.sh ${this.options.gitpodDaemonsetPorts.registryFacade} ${this.options.gitpodDaemonsetPorts.wsDaemon} ${nodepoolIndex} ${this.options.previewName} ${this.options.smithToken}`,
+            `${flags}./.werft/jobs/build/installer/post-process.sh ${this.options.gitpodDaemonsetPorts.registryFacade} ${this.options.gitpodDaemonsetPorts.wsDaemon} ${this.options.previewName} ${this.options.smithToken}`,
             { slice: slice },
         );
     }

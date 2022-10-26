@@ -11,14 +11,15 @@ set -euo pipefail
 # Required params
 REG_DAEMON_PORT=$1
 WS_DAEMON_PORT=$2
-NODE_POOL_INDEX=$3
+# Node pool index was only relevant with core-dev
+NODE_POOL_INDEX=0
 DEV_BRANCH=$4
 SMITH_TOKEN=$5
-if [[ -z ${REG_DAEMON_PORT} ]] || [[ -z ${WS_DAEMON_PORT} ]] || [[ -z ${NODE_POOL_INDEX} ]] || [[ -z ${DEV_BRANCH} ]] || [[ -z ${SMITH_TOKEN} ]]; then
-   echo "One or more input params were invalid: ${REG_DAEMON_PORT} ${WS_DAEMON_PORT} ${NODE_POOL_INDEX} ${DEV_BRANCH} ${SMITH_TOKEN}"
+if [[ -z ${REG_DAEMON_PORT} ]] || [[ -z ${WS_DAEMON_PORT} ]] || [[ -z ${DEV_BRANCH} ]] || [[ -z ${SMITH_TOKEN} ]]; then
+   echo "One or more input params were invalid: ${REG_DAEMON_PORT} ${WS_DAEMON_PORT} ${DEV_BRANCH} ${SMITH_TOKEN}"
    exit 1
 else
-   echo "Running with the following params: ${REG_DAEMON_PORT} ${WS_DAEMON_PORT} ${NODE_POOL_INDEX} ${DEV_BRANCH}"
+   echo "Running with the following params: ${REG_DAEMON_PORT} ${WS_DAEMON_PORT} ${DEV_BRANCH}"
 fi
 
 echo "Use node pool index $NODE_POOL_INDEX"

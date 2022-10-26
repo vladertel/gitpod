@@ -147,7 +147,7 @@ export default function UserDetail(p: { user: User }) {
             >
                 {isStudent === undefined ? "---" : isStudent ? "Enabled" : "Disabled"}
             </Property>,
-            <Property name="BillingMode">{billingMode?.mode || "---"}</Property>,
+            renderBillingModeProperty(billingMode),
         ];
 
         switch (billingMode?.mode) {
@@ -325,6 +325,25 @@ export default function UserDetail(p: { user: User }) {
                 </div>
             </Modal>
         </>
+    );
+}
+
+function renderBillingModeProperty(billingMode?: BillingMode): JSX.Element {
+    const text = billingMode?.mode || "---";
+
+    let details = "";
+    if (billingMode?.mode === "chargebee" && !!billingMode.teamNames && !billingMode.canUpgradeToUBB) {
+        details = `UBP blocked by: ${billingMode.teamNames.join(", ")}`;
+    }
+    return (
+        <Property name="BillingMode">
+            <>
+                {text}
+                <div className="mr-3 text-base text-gray-600 font-normal truncate" title={details}>
+                    {details}
+                </div>
+            </>
+        </Property>
     );
 }
 

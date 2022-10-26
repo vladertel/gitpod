@@ -9,6 +9,8 @@ import (
 	"fmt"
 	"github.com/gitpod-io/gitpod/previewctl/pkg/k8s"
 	"github.com/gitpod-io/gitpod/previewctl/pkg/preview"
+	"github.com/gitpod-io/gitpod/previewctl/pkg/ssh"
+	"k8s.io/client-go/tools/clientcmd"
 	"time"
 
 	"github.com/sirupsen/logrus"
@@ -21,6 +23,8 @@ var (
 )
 
 func installContextCmd(logger *logrus.Logger) *cobra.Command {
+	ctx := context.Background()
+
 	cmd := &cobra.Command{
 		Use:   "install-context",
 		Short: "Installs the kubectl context of a preview environment.",
@@ -35,8 +39,51 @@ func installContextCmd(logger *logrus.Logger) *cobra.Command {
 				return err
 			}
 
-			//return k.PortForward(context.Background(), "virt-launcher-aa-k3s-install-tpmxg", fmt.Sprintf("preview-%s", ns), "2200")
-			return k.PortForward(context.Background(), previewName, fmt.Sprintf("preview-%s", previewName), "2200")
+			stopChan, readyChan := make(chan struct{}, 1), make(chan struct{}, 1)
+
+			go func() {
+				err := k.PortForward(context.Background(), previewName, fmt.Sprintf("preview-%s", previewName), []string{"2200"}, stopChan, readyChan)
+				if err != nil {
+					return
+				}
+			}()
+
+			// block until port-forward is ready
+			<-readyChan
+
+			cfgGet, err := ssh.NewK3SConfigGetter(ctx, "127.0.0.1", "2200")
+			if err != nil {
+				return err
+			}
+
+			kube, err := cfgGet.GetK3SContext(ctx)
+			if err != nil {
+				return err
+			}
+
+			//fmt.Println(kube)
+
+			c, err := clientcmd.NewClientConfigFromBytes([]byte(kube))
+			if err != nil {
+				return err
+			}
+
+			rc, err := c.RawConfig()
+
+			fmt.Println(c)
+			fmt.Println(rc)
+
+			k3sConfig, err := k8s.RenameContext(&rc, "default", previewName)
+			if err != nil {
+				return err
+			}
+
+			k3, err := k8s.MergeWithDefaultConfig(k3sConfig)
+			if err != nil {
+				return err
+			}
+
+			fmt.Println(k3)
 
 			return nil
 		},

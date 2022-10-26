@@ -78,7 +78,7 @@ func (c *Config) getVMPodName(ctx context.Context, name, namespace string) (stri
 	return pods.Items[0].Name, nil
 }
 
-func (c *Config) PortForward(ctx context.Context, name, namespace, port string) error {
+func (c *Config) PortForward(ctx context.Context, name, namespace string, ports []string, stopChan, readyChan chan struct{}) error {
 	roundTripper, upgrader, err := spdy.RoundTripperFor(c.config)
 	if err != nil {
 		panic(err)
@@ -95,10 +95,8 @@ func (c *Config) PortForward(ctx context.Context, name, namespace, port string) 
 
 	dialer := spdy.NewDialer(upgrader, &http.Client{Transport: roundTripper}, http.MethodPost, &serverURL)
 
-	stopChan, readyChan := make(chan struct{}, 1), make(chan struct{}, 1)
 	out, errOut := new(bytes.Buffer), new(bytes.Buffer)
-
-	forwarder, err := portforward.New(dialer, []string{port}, stopChan, readyChan, out, errOut)
+	forwarder, err := portforward.New(dialer, ports, stopChan, readyChan, out, errOut)
 	if err != nil {
 		panic(err)
 	}

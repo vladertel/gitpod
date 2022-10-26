@@ -44,7 +44,7 @@ export class Installer {
         }
         const variables = Object
             .entries(envirionment)
-            .map(([key, value]) => `${key}="${value}`)
+            .map(([key, value]) => `${key}="${value}"`)
             .join(" ")
         exec(`${variables} leeway run dev/preview:deploy-gitpod`, {slice: slice})
     }

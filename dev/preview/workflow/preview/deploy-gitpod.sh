@@ -26,6 +26,7 @@ docker run \
     --pull=always \
     "eu.gcr.io/gitpod-core-dev/build/installer:${VERSION}" -c "cat /app/installer" \
 > /tmp/installer
+chmod +x /tmp/installer
 
 function installer {
     /tmp/installer "$@"
@@ -166,7 +167,7 @@ done
 #
 # configureStripeAPIKeys
 #
-kubectl --kubeconfig ${DEV_KUBE_PATH} -n werft get secret stripe-api-keys -o yaml > stripe-api-keys.secret.yaml
+kubectl --kubeconfig ${DEV_KUBE_PATH} --context "${DEV_KUBE_CONTEXT}" -n werft get secret stripe-api-keys -o yaml > stripe-api-keys.secret.yaml
 yq w -i stripe-api-keys.secret.yaml metadata.namespace "default"
 yq d -i stripe-api-keys.secret.yaml metadata.creationTimestamp
 yq d -i stripe-api-keys.secret.yaml metadata.uid

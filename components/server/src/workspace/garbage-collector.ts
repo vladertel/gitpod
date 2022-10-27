@@ -169,28 +169,28 @@ export class WorkspaceGarbageCollector {
             const workspaces = await this.workspaceDB
                 .trace({ span })
                 .findVolumeSnapshotWorkspacesForGC(this.config.workspaceGarbageCollection.chunkLimit);
-            const volumeSnapshotsWithWSPromise = await Promise.all(
-                workspaces.map((ws) => {
-                    let vss = this.workspaceDB
+            const volumeSnapshotsWithWSPromises = workspaces.map(async (wsId) => {
+                const [vss, ws] = await Promise.all([
+                    this.workspaceDB
                         .trace({ span })
-                        .findVolumeSnapshotForGCByWorkspaceId(ws, this.config.workspaceGarbageCollection.chunkLimit);
-                    return { ws, vss };
-                }),
-            );
-            for (const { ws, vss } of volumeSnapshotsWithWSPromise) {
-                const volumeSnapshots = await vss;
-                // we need full workspace object to get its type
-                let fullWS = await this.workspaceDB.trace({ span }).findById(ws);
-                if (!fullWS) {
-                    throw new Error(`Workspace ${ws} not found while looking for outdated volume snapshots`);
+                        .findVolumeSnapshotForGCByWorkspaceId(wsId, this.config.workspaceGarbageCollection.chunkLimit),
+                    this.workspaceDB.trace({ span }).findById(wsId),
+                ]);
+                return { wsId, ws, vss };
+            });
+
+            // We're doing the actual deletion in a sync for-loop tp avoid quadratic explosion of requests
+            for await (const { wsId, ws, vss } of volumeSnapshotsWithWSPromises) {
+                if (!ws) {
+                    log.error(`Workspace ${wsId} not found while looking for outdated volume snapshots`);
+                    continue; // Still, continue deleting the others
                 }
-                let wsType = fullWS.type;
                 await Promise.all(
                     // skip the first volume snapshot, as it is most recent, and then pass the rest into deletion
-                    volumeSnapshots.slice(1).map((vs) => {
+                    vss.slice(1).map((vs) => {
                         let vswst: VolumeSnapshotWithWSType = {
                             vs,
-                            wsType: wsType,
+                            wsType: ws?.type,
                         };
                         return this.deletionService.garbageCollectVolumeSnapshot({ span }, vswst);
                     }),

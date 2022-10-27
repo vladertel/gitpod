@@ -45,7 +45,7 @@ func installContextCmd(logger *logrus.Logger) *cobra.Command {
 				return err
 			}
 
-			p.Install(ctx)
+			return p.Install(ctx)
 			//k, err := k8s.NewFromDefaultConfigWithContext(logger, "harvester")
 			//if err != nil {
 			//	return err

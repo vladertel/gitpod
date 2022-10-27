@@ -189,8 +189,8 @@ func (p *Preview) Install(ctx context.Context) error {
 		return nil
 	case <-errChan:
 		return err
-	case <-time.After(time.Second * 30):
-		errChan <- errors.New("timed out waiting for port forward")
+	case <-time.After(time.Second * 2):
+		return errors.New("timed out waiting for port forward")
 	}
 
 	select {}

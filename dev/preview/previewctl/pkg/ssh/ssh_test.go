@@ -3,6 +3,7 @@ package ssh
 import (
 	"context"
 	"io"
+	"k8s.io/apimachinery/pkg/runtime"
 	"testing"
 
 	"github.com/cockroachdb/errors"
@@ -65,25 +66,33 @@ users:
 			},
 			expected: &k3sExpStruct{
 				config: &api.Config{
+					Preferences: api.Preferences{
+						Extensions: map[string]runtime.Object{},
+					},
 					Contexts: map[string]*api.Context{
 						"test": {
-							Cluster: "test",
+							Cluster:    "test",
+							AuthInfo:   "test",
+							Extensions: map[string]runtime.Object{},
 						},
 					},
 					Clusters: map[string]*api.Cluster{
 						"test": {
 							LocationOfOrigin:         "",
-							Server:                   " https://test.kube.gitpod-dev.com:6443",
-							CertificateAuthorityData: []byte("dGVzdF9kYXRh"),
+							Server:                   "https://test.kube.gitpod-dev.com:6443",
+							CertificateAuthorityData: []byte("test_data"),
+							Extensions:               map[string]runtime.Object{},
 						},
 					},
 					CurrentContext: "test",
 					AuthInfos: map[string]*api.AuthInfo{
 						"test": {
-							ClientCertificateData: []byte("dGVzdF9kYXRh"),
-							ClientKeyData:         []byte("dGVzdF9kYXRh"),
+							ClientCertificateData: []byte("test_data"),
+							ClientKeyData:         []byte("test_data"),
+							Extensions:            map[string]runtime.Object{},
 						},
 					},
+					Extensions: map[string]runtime.Object{},
 				},
 				err: nil,
 			},
@@ -96,31 +105,12 @@ users:
 
 		config, err := k.GetK3SContext(context.TODO())
 
-		if test.expected.config != nil {
-			assert.NotNil(t, config)
-			assert.Equal(t, config.Contexts, test.expected.config.Contexts)
-		}
-
-		//assert.Same(t, config, test.expected.config)
-
-		//ok := reflect.DeepEqual(config, test.expected.config)
-		//if !ok {
-		//	t.Error("not equal")
-		//}
 		assert.ErrorIs(t, err, test.expected.err)
+		assert.Equal(t, config, test.expected.config)
 	}
 }
 
 var _ sshClient = &mocksshClient{}
-var _ sshClientFactory = &mocksshClientFactory{}
-
-type mocksshClientFactory struct {
-	client sshClient
-}
-
-func (m mocksshClientFactory) Dial(ctx context.Context, host, port string) (sshClient, error) {
-	return &mocksshClient{}, nil
-}
 
 type mockCommand struct {
 	cmd    string

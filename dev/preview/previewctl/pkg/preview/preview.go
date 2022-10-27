@@ -9,6 +9,8 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"github.com/gitpod-io/gitpod/previewctl/pkg/ssh"
+	"k8s.io/client-go/tools/clientcmd"
 	"os"
 	"os/exec"
 	"regexp"
@@ -146,8 +148,56 @@ func ensureVMICreationTime(p *Preview) {
 	}
 }
 
+func (p *Preview) Install(ctx context.Context) error {
+	k, err := k8s.NewFromDefaultConfigWithContext(p.logger.Logger, "harvester")
+	if err != nil {
+		return err
+	}
+
+	stopChan, readyChan, errChan := make(chan struct{}, 1), make(chan struct{}, 1), make(chan error, 1)
+
+	go func() {
+		err := k.PortForward(context.Background(), p.name, fmt.Sprintf("preview-%s", p.name), []string{"2200"}, stopChan, readyChan)
+		if err != nil {
+			errChan <- err
+			return
+		}
+	}()
+
+	select {
+	case <-readyChan:
+		cfgGet, err := ssh.NewK3SConfigGetter(ctx, "127.0.0.1", "2200")
+		if err != nil {
+			return err
+		}
+
+		kube, err := cfgGet.GetK3SContext(ctx)
+		if err != nil {
+			return err
+		}
+
+		k3sConfig, err := k8s.RenameConfig(kube, "default", p.name)
+		if err != nil {
+			return err
+		}
+
+		k3sConfig.Clusters[p.name].Server = fmt.Sprintf("https://%s.kube.gitpod-dev.com:6443", p.name)
+
+		c, _ := clientcmd.Write(*k3sConfig)
+		fmt.Println(string(c))
+
+		return nil
+	case <-errChan:
+		return err
+	case <-time.After(time.Second * 30):
+		errChan <- errors.New("timed out waiting for port forward")
+	}
+
+	select {}
+}
+
 func installContext(branch string) error {
-	return exec.Command("bash", "/workspace/gitpod/dev/preview/install-k3s-kubeconfig.sh", "-b", branch).Run()
+	return exec.Command("bash", "/workspace/gitpod/dev/preview/Install-k3s-kubeconfig.sh", "-b", branch).Run()
 }
 
 func SSHPreview(branch string) error {

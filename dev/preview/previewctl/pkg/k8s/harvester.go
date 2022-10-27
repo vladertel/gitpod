@@ -53,7 +53,7 @@ func (c *Config) GetHarvesterKubeConfig(ctx context.Context) (*api.Config, error
 		return nil, err
 	}
 
-	return RenameContext(config, "default", "harvester")
+	return RenameConfig(config, "default", "harvester")
 }
 
 func (c *Config) getVMPodName(ctx context.Context, name, namespace string) (string, error) {
@@ -112,7 +112,7 @@ func (c *Config) PortForward(ctx context.Context, name, namespace string, ports 
 	}()
 
 	if err = forwarder.ForwardPorts(); err != nil { // Locks until stopChan is closed.
-		panic(err)
+		return err
 	}
 
 	return nil

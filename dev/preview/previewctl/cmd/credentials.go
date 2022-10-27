@@ -18,11 +18,6 @@ import (
 	kube "github.com/gitpod-io/gitpod/previewctl/pkg/k8s"
 )
 
-var (
-	serviceAccountPath string
-	kubeConfigSavePath string
-)
-
 const (
 	coreDevClusterName        = "core-dev"
 	coreDevProjectID          = "gitpod-core-dev"
@@ -33,6 +28,9 @@ const (
 type getCredentialsOpts struct {
 	gcpClient *gcloud.Config
 	logger    *logrus.Logger
+
+	serviceAccountPath string
+	kubeConfigSavePath string
 
 	getCredentialsMap map[string]func(ctx context.Context) (*api.Config, error)
 	configMap         map[string]*api.Config
@@ -52,7 +50,7 @@ func newGetCredentialsCommand(logger *logrus.Logger) *cobra.Command {
 		Long: `previewctl get-credentials retrieves the kubernetes configs for core-dev and harvester clusters,
 merges them with the default config, and outputs them either to stdout or to a file.`,
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
-			client, err = gcloud.New(ctx, serviceAccountPath)
+			client, err = gcloud.New(ctx, opts.serviceAccountPath)
 			if err != nil {
 				return err
 			}
@@ -77,12 +75,17 @@ merges them with the default config, and outputs them either to stdout or to a f
 				}
 			}
 
-			return opts.mergeContexts()
+			configs := make([]*api.Config, 0, len(opts.configMap))
+			for _, c := range opts.configMap {
+				configs = append(configs, c)
+			}
+
+			return MergeContexts(opts.kubeConfigSavePath, configs...)
 		},
 	}
 
-	cmd.PersistentFlags().StringVar(&serviceAccountPath, "gcp-service-account", "", "path to the GCP service account to use")
-	cmd.PersistentFlags().StringVar(&kubeConfigSavePath, "kube-save-path", "", "path to save the generated kubeconfig to")
+	cmd.PersistentFlags().StringVar(&opts.serviceAccountPath, "gcp-service-account", "", "path to the GCP service account to use")
+	cmd.PersistentFlags().StringVar(&opts.kubeConfigSavePath, "kube-save-path", "", "path to save the generated kubeconfig to")
 
 	return cmd
 }
@@ -98,33 +101,6 @@ func hasAccess(logger *logrus.Logger, contextName string) bool {
 	}
 
 	return config.HasAccess()
-}
-
-func (o *getCredentialsOpts) mergeContexts() error {
-	var err error
-	configs := make([]*api.Config, 0, len(o.configMap))
-
-	for _, config := range o.configMap {
-		configs = append(configs, config)
-	}
-
-	finalConfig, err := kube.MergeWithDefaultConfig(configs...)
-	if err != nil {
-		return err
-	}
-
-	if kubeConfigSavePath != "" {
-		return clientcmd.WriteToFile(*finalConfig, kubeConfigSavePath)
-	}
-
-	bytes, err := clientcmd.Write(*finalConfig)
-	if err != nil {
-		return err
-	}
-
-	fmt.Println(string(bytes))
-
-	return err
 }
 
 func (o *getCredentialsOpts) getCoreDevKubeConfig(ctx context.Context) (*api.Config, error) {
@@ -165,4 +141,29 @@ func (o *getCredentialsOpts) getHarvesterKubeConfig(ctx context.Context) (*api.C
 	}
 
 	return harvesterConfig, nil
+}
+
+func MergeContexts(kubeConfigSavePath string, configs ...*api.Config) error {
+	toMerge := make([]*api.Config, 0, len(configs))
+	for _, config := range configs {
+		toMerge = append(toMerge, config)
+	}
+
+	finalConfig, err := kube.MergeWithDefaultConfig(toMerge...)
+	if err != nil {
+		return err
+	}
+
+	if kubeConfigSavePath != "" {
+		return clientcmd.WriteToFile(*finalConfig, kubeConfigSavePath)
+	}
+
+	bytes, err := clientcmd.Write(*finalConfig)
+	if err != nil {
+		return err
+	}
+
+	fmt.Println(string(bytes))
+
+	return err
 }

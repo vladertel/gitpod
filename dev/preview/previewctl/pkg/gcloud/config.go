@@ -86,7 +86,7 @@ func (c *Config) GenerateConfig(ctx context.Context, name, projectID, zone, rena
 	}
 
 	if renamedContext != "" {
-		return kube.RenameContext(ret, name, renamedContext)
+		return kube.RenameConfig(ret, name, renamedContext)
 	}
 
 	return ret, nil

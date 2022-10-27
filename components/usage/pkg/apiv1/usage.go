@@ -246,6 +246,17 @@ func (s UsageService) ResetUsage(ctx context.Context, req *v1.ResetUsageRequest)
 
 	log.Infof("Identified %d expired cost centers at relative to %s", len(costCentersToUpdate), now.Format(time.RFC3339))
 
+	var errors []error
+	for _, cc := range costCentersToUpdate {
+		_, err = s.costCenterManager.ResetUsage(ctx, cc)
+		if err != nil {
+			errors = append(errors, err)
+		}
+	}
+	if len(errors) >= 1 {
+		log.WithField("errors", errors).Error("Failed to reset usage.")
+	}
+
 	return &v1.ResetUsageResponse{}, nil
 }
 

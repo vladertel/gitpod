@@ -12,7 +12,7 @@ import (
 type sshClient interface {
 	io.Closer
 
-	Exec(ctx context.Context, cmd string, stdout io.Writer, stderr io.Writer) error
+	Run(ctx context.Context, cmd string, stdout io.Writer, stderr io.Writer) error
 }
 
 type sshClientFactory interface {
@@ -25,7 +25,7 @@ type clientImplementation struct {
 
 var _ sshClient = &clientImplementation{}
 
-func (s *clientImplementation) Exec(ctx context.Context, cmd string, stdout io.Writer, stderr io.Writer) error {
+func (s *clientImplementation) Run(ctx context.Context, cmd string, stdout io.Writer, stderr io.Writer) error {
 	sess, err := s.client.NewSession()
 	if err != nil {
 		return err

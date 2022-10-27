@@ -7,14 +7,14 @@ package cmd
 import (
 	"context"
 	"fmt"
-	"github.com/gitpod-io/gitpod/previewctl/pkg/k8s"
-	"github.com/gitpod-io/gitpod/previewctl/pkg/preview"
-	"github.com/gitpod-io/gitpod/previewctl/pkg/ssh"
-	"k8s.io/client-go/tools/clientcmd"
 	"time"
 
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
+
+	"github.com/gitpod-io/gitpod/previewctl/pkg/k8s"
+	"github.com/gitpod-io/gitpod/previewctl/pkg/preview"
+	"github.com/gitpod-io/gitpod/previewctl/pkg/ssh"
 )
 
 var (
@@ -61,19 +61,7 @@ func installContextCmd(logger *logrus.Logger) *cobra.Command {
 				return err
 			}
 
-			//fmt.Println(kube)
-
-			c, err := clientcmd.NewClientConfigFromBytes([]byte(kube))
-			if err != nil {
-				return err
-			}
-
-			rc, err := c.RawConfig()
-
-			fmt.Println(c)
-			fmt.Println(rc)
-
-			k3sConfig, err := k8s.RenameContext(&rc, "default", previewName)
+			k3sConfig, err := k8s.RenameContext(kube, "default", previewName)
 			if err != nil {
 				return err
 			}

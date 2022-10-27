@@ -137,6 +137,18 @@ func (o *getCredentialsOpts) getCoreDevKubeConfig(ctx context.Context) (*api.Con
 }
 
 func (o *getCredentialsOpts) getHarvesterKubeConfig(ctx context.Context) (*api.Config, error) {
+	if _, ok := o.configMap[coreDevDesiredContextName]; !ok {
+		configLoadingRules := clientcmd.NewDefaultClientConfigLoadingRules()
+		configOverrides := &clientcmd.ConfigOverrides{CurrentContext: coreDevDesiredContextName}
+
+		config, err := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(configLoadingRules, configOverrides).RawConfig()
+		if err != nil {
+			return nil, err
+		}
+
+		o.configMap[coreDevDesiredContextName] = &config
+	}
+
 	coreDevClientConfig, err := clientcmd.NewNonInteractiveClientConfig(*o.configMap[coreDevDesiredContextName], coreDevDesiredContextName, nil, nil).ClientConfig()
 	if err != nil {
 		return nil, err

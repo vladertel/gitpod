@@ -3,13 +3,22 @@ package ssh
 import (
 	"bytes"
 	"context"
-	"fmt"
-	"golang.org/x/crypto/ssh"
 	"os"
+	"strings"
+
+	"github.com/cockroachdb/errors"
+	"golang.org/x/crypto/ssh"
+	"k8s.io/client-go/tools/clientcmd"
+	"k8s.io/client-go/tools/clientcmd/api"
 )
 
 const (
-	k3sConfigPath = "/etc/rancher/k3s/k3s.yaml"
+	k3sConfigPath   = "/etc/rancher/k3s/k3s.yaml"
+	catK3sConfigCmd = "sudo cat /etc/rancher/k3s/k3s.yaml"
+)
+
+var (
+	ErrK3SConfigNotFound = errors.New("k3s config file not found")
 )
 
 type K3SConfigGetter struct {
@@ -52,9 +61,33 @@ func NewK3SConfigGetter(ctx context.Context, host, port string) (*K3SConfigGette
 
 	config.client = client
 
-	fmt.Println(config)
-
 	return config, nil
+}
+
+func (k *K3SConfigGetter) GetK3SContext(ctx context.Context) (*api.Config, error) {
+	stdout := new(bytes.Buffer)
+	stderr := new(bytes.Buffer)
+
+	err := k.client.Run(ctx, catK3sConfigCmd, stdout, stderr)
+	if err != nil {
+		if strings.Contains(stderr.String(), "No such file or directory") {
+			return nil, ErrK3SConfigNotFound
+		}
+
+		return nil, errors.Wrap(err, stderr.String())
+	}
+
+	c, err := clientcmd.NewClientConfigFromBytes(stdout.Bytes())
+	if err != nil {
+		return nil, err
+	}
+
+	rc, err := c.RawConfig()
+	if err != nil {
+		return nil, err
+	}
+
+	return &rc, nil
 }
 
 func (k *K3SConfigGetter) connectToHost(ctx context.Context, host, port string) (sshClient, error) {
@@ -63,16 +96,4 @@ func (k *K3SConfigGetter) connectToHost(ctx context.Context, host, port string) 
 
 func (k *K3SConfigGetter) Close() error {
 	return k.client.Close()
-}
-
-func (k *K3SConfigGetter) GetK3SContext(ctx context.Context) (string, error) {
-	stdout := new(bytes.Buffer)
-	stderr := new(bytes.Buffer)
-
-	err := k.client.Exec(ctx, "sudo cat /etc/rancher/k3s/k3s.yaml", stdout, stderr)
-	if err != nil {
-		return "", err
-	}
-
-	return stdout.String(), nil
 }

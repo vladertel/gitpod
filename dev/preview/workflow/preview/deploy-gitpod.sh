@@ -19,6 +19,11 @@ PREVIEW_NAME="$(preview-name-from-branch)"
 PREVIEW_K3S_KUBE_PATH="${PREVIEW_K3S_KUBECONFIG_PATH:-/home/gitpod/.kube/config}"
 PREVIEW_K3S_KUBE_CONTEXT="${PREVIEW_K3S_KUBE_CONTEXT:-$PREVIEW_NAME}"
 
+# TODO: Figure out why Leeway doesn't like this.
+# AGENT_SMITH_TOKEN="$(tr -dc 'A-Fa-f0-9' < /dev/urandom | head -c61)"
+AGENT_SMITH_TOKEN="57B8fdFD68442a37E18B22bFD83638D451E087A047Eb4e4BF8BCc3EdF5825"
+
+
 INSTALLATION_NAMESPACE="default"
 
 PATH_TO_RENDERED_YAML="k8s.yaml"
@@ -336,9 +341,10 @@ SERVICE_WAITER_VERSION="$(yq r /tmp/versions.yaml 'components.serviceWaiter.vers
 PAYMENT_ENDPOINT_VERSION="$(yq r /tmp/versions.yaml 'components.paymentEndpoint.version')"
 
 # 2. render chargebee-config and payment-endpoint
+rm -f /tmp/payment
 for manifest in "$ROOT"/.werft/jobs/build/payment/*.yaml; do
   sed "s/\${NAMESPACE}/${INSTALLATION_NAMESPACE}/g" "$manifest" \
-  | sed "s/\${PAYMENT_ENDPOINT_VERSION}/${PAYMENT_ENDPOINT_VERSION}g" \
+  | sed "s/\${PAYMENT_ENDPOINT_VERSION}/${PAYMENT_ENDPOINT_VERSION}/g" \
   | sed "s/\${SERVICE_WAITER_VERSION}/${SERVICE_WAITER_VERSION}/g" \
   >> /tmp/payment
   echo "---" >> /tmp/payment
@@ -347,8 +353,6 @@ done
 #
 # Run post-process script
 #
-AGENT_SMITH_TOKEN="$(tr -dc 'A-Fa-f0-9' < /dev/urandom | head -c61)"
-# AGENT_SMITH_TOKEN_HASH=$(echo -n AGENT_SMITH_TOKEN | sha256sum)
 
 REGISTRY_FACADE_PORT="$(findLastHostPort 'registry-facade')"
 WS_DAEMON_PORT="$(findLastHostPort 'ws-daemon')"
@@ -358,4 +362,51 @@ WITH_VM=true "$ROOT/.werft/jobs/build/installer/post-process.sh" \
   "${PREVIEW_NAME}" \
   "${AGENT_SMITH_TOKEN}"
 
-# TODO: Invoke addAgentSmithToken
+#
+# Cleanup from post-processing
+#
+rm -f /tmp/payment
+rm -f /tmp/defaultFeatureFlags
+rm -f /tmp/license
+
+# ===============
+# Install
+# ===============
+kubectl --kubeconfig "${PREVIEW_K3S_KUBE_PATH}" --context "${PREVIEW_K3S_KUBE_CONTEXT}" delete -n "${INSTALLATION_NAMESPACE}" job migrations || true
+kubectl --kubeconfig "${PREVIEW_K3S_KUBE_PATH}" --context "${PREVIEW_K3S_KUBE_CONTEXT}" apply -f "${PATH_TO_RENDERED_YAML}"
+rm -f "${PATH_TO_RENDERED_YAML}"
+
+# =========================
+# Wait for pods to be ready
+# =========================
+echo "Waiting until all pods in namespace ${INSTALLATION_NAMESPACE} are Running/Succeeded/Completed."
+ATTEMPTS=0
+while [ ${ATTEMPTS} -lt 200 ]
+do
+  ATTEMPTS=$((ATTEMPTS+1))
+  pods=$(
+    kubectl \
+      --kubeconfig "${PREVIEW_K3S_KUBE_PATH}" \
+      --context "${PREVIEW_K3S_KUBE_CONTEXT}" \
+      get pods -n ${INSTALLATION_NAMESPACE} \
+        -l 'component!=workspace' \
+        -o=jsonpath='{range .items[*]}{@.metadata.name}:{@.metadata.ownerReferences[0].kind}:{@.status.phase};{end}'
+  )
+  if [[ -z "${pods}" ]]; then
+    echo "The namespace is empty or does not exist."
+    echo "Sleeping"
+    sleep 3
+    continue
+  fi
+  break
+done
+
+echo "Installation is happy: https://${DOMAIN}/workspaces"
+# =====================
+# Add agent smith token
+# =====================
+# TODO: Invoke addAgentSmithToke
+# process.env.KUBECONFIG = kubeconfigPath;
+# process.env.TOKEN = token;
+# setKubectlContextNamespace(namespace, {});
+# exec("leeway run components:add-smith-token");

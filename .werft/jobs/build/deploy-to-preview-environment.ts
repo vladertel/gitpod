@@ -43,10 +43,7 @@ const installerSlices = {
     COPY_CERTIFICATES: "Copying certificates",
     CLEAN_ENV_STATE: "clean envirionment",
     SET_CONTEXT: "set namespace",
-    INSTALLER_CONFIG: "Generate and validate installer config",
-    INSTALLER_RENDER: "installer render",
-    INSTALLER_POST_PROCESSING: "installer post processing",
-    APPLY_INSTALL_MANIFESTS: "installer apply",
+    INSTALL: "Generate, validate, and install Gitpod",
     DEPLOYMENT_WAITING: "monitor server deployment",
     DNS_ADD_RECORD: "add dns record",
 };
@@ -268,9 +265,6 @@ async function deployToDevWithInstaller(
         };
     }
 
-    // TOOD: Delete
-    const [token, tokenHash] = generateToken();
-
     const installer = new Installer({
         werft: werft,
         installerConfigPath: "/tmp/config.yaml",
@@ -287,8 +281,8 @@ async function deployToDevWithInstaller(
     });
     try {
         werft.log(phases.DEPLOY, "deploying using installer");
-        installer.generateAndValidateConfig(installerSlices.INSTALLER_CONFIG)
-        installer.install(installerSlices.APPLY_INSTALL_MANIFESTS);
+        installer.install(installerSlices.INSTALL);
+        exec(`werft log result -d "dev installation" -c github-check-preview-env url https://${domain}/workspaces`)
     } catch (err) {
         werft.fail(phases.DEPLOY, err);
     }
@@ -298,8 +292,6 @@ async function deployToDevWithInstaller(
         slice: installerSlices.DEPLOYMENT_WAITING,
     });
     werft.done(installerSlices.DEPLOYMENT_WAITING);
-
-    addAgentSmithToken(werft, deploymentConfig.namespace, installer.options.kubeconfigPath, tokenHash);
 
     werft.done(phases.DEPLOY);
 }
@@ -336,20 +328,4 @@ async function installMetaCertificates(
 
 function metaEnv(_parent?: ExecOptions): ExecOptions {
     return env("", _parent);
-}
-
-function addAgentSmithToken(werft: Werft, namespace: string, kubeconfigPath: string, token: string) {
-    process.env.KUBECONFIG = kubeconfigPath;
-    process.env.TOKEN = token;
-    setKubectlContextNamespace(namespace, {});
-    exec("leeway run components:add-smith-token");
-    delete process.env.KUBECONFIG;
-    delete process.env.TOKEN;
-}
-
-function generateToken(): [string, string] {
-    const token = randomBytes(30).toString("hex");
-    const tokenHash = createHash("sha256").update(token, "utf-8").digest("hex");
-
-    return [token, tokenHash];
 }

@@ -34,7 +34,7 @@ export class Installer {
         this.options = options;
     }
 
-    generateAndValidateConfig(slice: string): void {
+    install(slice: string): void {
         const environment = {
             "VERSION": this.options.version,
             "INSTALLER_CONFIG_PATH": this.options.installerConfigPath,
@@ -48,21 +48,6 @@ export class Installer {
             .map(([key, value]) => `${key}="${value}"`)
             .join(" ")
         exec(`${variables} leeway run dev/preview:deploy-gitpod`, {slice: slice})
-        this.options.werft.done(slice);
-    }
-
-    install(slice: string): void {
-        this.options.werft.log(slice, "Installing Gitpod");
-        exec(
-            `kubectl --kubeconfig ${this.options.kubeconfigPath} delete -n ${this.options.deploymentNamespace} job migrations || true`,
-            { silent: true },
-        );
-        // errors could result in outputing a secret to the werft log when kubernetes patches existing objects...
-        exec(`kubectl --kubeconfig ${this.options.kubeconfigPath} apply -f k8s.yaml`, { silent: true });
-
-        exec(
-            `werft log result -d "dev installation" -c github-check-preview-env url https://${this.options.domain}/workspaces`,
-        );
         this.options.werft.done(slice);
     }
 }

@@ -3,6 +3,7 @@
 set -euo pipefail
 
 SCRIPT_PATH=$(realpath "$(dirname "$0")")
+ROOT="${SCRIPT_PATH}/../../../../"
 
 # shellcheck source=../lib/common.sh
 source "$(realpath "${SCRIPT_PATH}/../lib/common.sh")"
@@ -14,7 +15,13 @@ DEV_KUBE_CONTEXT="dev"
 HARVESTER_KUBE_PATH="/home/gitpod/.kube/config"
 HARVESTER_KUBE_CONTEXT="harvester"
 
+PREVIEW_NAME="$(preview-name-from-branch)"
+PREVIEW_K3S_KUBE_PATH="${PREVIEW_K3S_KUBECONFIG_PATH:-/home/gitpod/.kube/config}"
+PREVIEW_K3S_KUBE_CONTEXT="${PREVIEW_K3S_KUBE_CONTEXT:-$PREVIEW_NAME}"
+
 INSTALLATION_NAMESPACE="default"
+
+PATH_TO_RENDERED_YAML="k8s.yaml"
 
 VERSION="${VERSION:-$(preview-name-from-branch)-dev}"
 INSTALLER_CONFIG_PATH="${INSTALLER_CONFIG_PATH:-$(mktemp "/tmp/XXXXXX.gitpod.config.yaml")}"
@@ -30,6 +37,26 @@ chmod +x /tmp/installer
 
 function installer {
     /tmp/installer "$@"
+}
+
+function findLastHostPort {
+  name="$1"
+  kubectl \
+    --kubeconfig "${PREVIEW_K3S_KUBE_PATH}" \
+    --context "${PREVIEW_K3S_KUBE_CONTEXT}" \
+    get ds -n ${INSTALLATION_NAMESPACE} "${name}" -o yaml \
+  | yq r - 'spec.template.spec.containers.*.ports.*.hostPort'
+
+  #
+  # TODO: If the port is empty, then select one.
+  # [wsdaemonPortMeta, registryNodePortMeta] = await findFreeHostPorts(
+  #           [
+  #               { start: 10000, end: 11000 },
+  #               { start: 30000, end: 31000 },
+  #           ],
+  #           deploymentKubeconfig,
+  #           metaEnv({ slice: installerSlices.FIND_FREE_HOST_PORTS, silent: true }),
+  #       );
 }
 
 # ========
@@ -259,3 +286,76 @@ installer validate config --config "$INSTALLER_CONFIG_PATH"
 
 # TODO: This doesn't support separate kubeconfig and kubectx yet so we need to find a way around that
 # installer validate cluster --kubeconfig "${HARVESTER_KUBE_PATH}" --config "${INSTALLER_CONFIG_PATH}"
+
+# ========
+# Render
+# ========
+
+installer render \
+  --use-experimental-config \
+  --namespace "${INSTALLATION_NAMESPACE}" \
+  --config "${INSTALLER_CONFIG_PATH}" > "${PATH_TO_RENDERED_YAML}"
+
+# ===============
+# Post-processing
+# ===============
+
+#
+# configureLicense
+#
+# TODO: Read "this.options.withEELicense"
+WITH_EE_LICENSE="false"
+if [[ "${WITH_EE_LICENSE}" == "true" ]]
+then
+  cp /mnt/secrets/gpsh-harvester/license /tmp/license
+else
+  touch /tmp/license
+fi
+
+#
+# configureWorkspaceFeatureFlags
+#
+
+touch /tmp/defaultFeatureFlags
+# TODO: Read "this.options.workspaceFeatureFlags"
+WORKSPACE_FEATURE_FLAGS=""
+for feature in ${WORKSPACE_FEATURE_FLAGS}; do
+  # post-process.sh looks for /tmp/defaultFeatureFlags
+  # each "flag" string gets added to the configmap
+  # also watches aout for /tmp/payment
+  echo "$feature" >> /tmp/defaultFeatureFlags
+done
+
+#
+# configurePayment
+#
+
+# 1. Read versions from docker image
+docker run --rm "eu.gcr.io/gitpod-core-dev/build/versions:$VERSION" cat /versions.yaml > /tmp/versions.yaml
+SERVICE_WAITER_VERSION="$(yq r /tmp/versions.yaml 'components.serviceWaiter.version')"
+PAYMENT_ENDPOINT_VERSION="$(yq r /tmp/versions.yaml 'components.paymentEndpoint.version')"
+
+# 2. render chargebee-config and payment-endpoint
+for manifest in "$ROOT"/.werft/jobs/build/payment/*.yaml; do
+  sed "s/\${NAMESPACE}/${INSTALLATION_NAMESPACE}/g" "$manifest" \
+  | sed "s/\${PAYMENT_ENDPOINT_VERSION}/${PAYMENT_ENDPOINT_VERSION}g" \
+  | sed "s/\${SERVICE_WAITER_VERSION}/${SERVICE_WAITER_VERSION}/g" \
+  >> /tmp/payment
+  echo "---" >> /tmp/payment
+done
+
+#
+# Run post-process script
+#
+AGENT_SMITH_TOKEN="$(tr -dc 'A-Fa-f0-9' < /dev/urandom | head -c61)"
+# AGENT_SMITH_TOKEN_HASH=$(echo -n AGENT_SMITH_TOKEN | sha256sum)
+
+REGISTRY_FACADE_PORT="$(findLastHostPort 'registry-facade')"
+WS_DAEMON_PORT="$(findLastHostPort 'ws-daemon')"
+WITH_VM=true "$ROOT/.werft/jobs/build/installer/post-process.sh" \
+  "${REGISTRY_FACADE_PORT}" \
+  "${WS_DAEMON_PORT}" \
+  "${PREVIEW_NAME}" \
+  "${AGENT_SMITH_TOKEN}"
+
+# TODO: Invoke addAgentSmithToken

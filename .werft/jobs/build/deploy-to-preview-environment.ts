@@ -224,38 +224,6 @@ async function deployToDevWithInstaller(
     const { version, namespace } = deploymentConfig;
     const deploymentKubeconfig = PREVIEW_K3S_KUBECONFIG_PATH;
 
-    // find free ports
-    werft.log(installerSlices.FIND_FREE_HOST_PORTS, "Find last ports");
-    let wsdaemonPortMeta = findLastHostPort(
-        namespace,
-        "ws-daemon",
-        deploymentKubeconfig,
-        metaEnv({ slice: installerSlices.FIND_FREE_HOST_PORTS, silent: true }),
-    );
-    let registryNodePortMeta = findLastHostPort(
-        namespace,
-        "registry-facade",
-        deploymentKubeconfig,
-        metaEnv({ slice: installerSlices.FIND_FREE_HOST_PORTS, silent: true }),
-    );
-
-    if (isNaN(wsdaemonPortMeta) || isNaN(wsdaemonPortMeta)) {
-        werft.log(installerSlices.FIND_FREE_HOST_PORTS, "Can't reuse, check for some free ports.");
-        [wsdaemonPortMeta, registryNodePortMeta] = await findFreeHostPorts(
-            [
-                { start: 10000, end: 11000 },
-                { start: 30000, end: 31000 },
-            ],
-            deploymentKubeconfig,
-            metaEnv({ slice: installerSlices.FIND_FREE_HOST_PORTS, silent: true }),
-        );
-    }
-    werft.log(
-        installerSlices.FIND_FREE_HOST_PORTS,
-        `wsdaemonPortMeta: ${wsdaemonPortMeta}, registryNodePortMeta: ${registryNodePortMeta}.`,
-    );
-    werft.done(installerSlices.FIND_FREE_HOST_PORTS);
-
     // clean environment state
     try {
         werft.log(installerSlices.CLEAN_ENV_STATE, "Clean the preview environment slate...");
@@ -300,6 +268,7 @@ async function deployToDevWithInstaller(
         };
     }
 
+    // TOOD: Delete
     const [token, tokenHash] = generateToken();
 
     const installer = new Installer({
@@ -314,15 +283,11 @@ async function deployToDevWithInstaller(
         deploymentNamespace: namespace,
         analytics: analytics,
         withEELicense: deploymentConfig.installEELicense,
-        workspaceFeatureFlags: workspaceFeatureFlags,
-        gitpodDaemonsetPorts: { registryFacade: registryNodePortMeta, wsDaemon: wsdaemonPortMeta },
-        smithToken: token,
+        workspaceFeatureFlags: workspaceFeatureFlags
     });
     try {
         werft.log(phases.DEPLOY, "deploying using installer");
         installer.generateAndValidateConfig(installerSlices.INSTALLER_CONFIG)
-        installer.render(installerSlices.INSTALLER_RENDER);
-        installer.postProcessing(installerSlices.INSTALLER_POST_PROCESSING);
         installer.install(installerSlices.APPLY_INSTALL_MANIFESTS);
     } catch (err) {
         werft.fail(phases.DEPLOY, err);

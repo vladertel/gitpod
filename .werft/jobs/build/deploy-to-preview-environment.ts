@@ -93,8 +93,11 @@ export async function deployToPreviewEnvironment(werft: Werft, jobConfig: JobCon
     VM.copyk3sKubeconfigShell({ name: destname, timeoutMS: 1000 * 60 * 6, slice: vmSlices.KUBECONFIG });
     werft.done(vmSlices.KUBECONFIG);
 
+    // TODO: Port over to bash or create issue to move to leeway dev/preview:create-preview
     VM.installRookCeph({ kubeconfig: PREVIEW_K3S_KUBECONFIG_PATH });
     werft.rootSpan.setAttributes({ "preview.rook_installed_successfully": true });
+
+    // TODO: Port over to bash or create issue to move to leeway dev/preview:create-preview
     VM.installFluentBit({
         namespace: "default",
         kubeconfig: PREVIEW_K3S_KUBECONFIG_PATH,

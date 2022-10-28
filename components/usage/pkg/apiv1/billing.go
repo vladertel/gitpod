@@ -83,8 +83,14 @@ func (s *BillingService) GetStripeCustomer(ctx context.Context, req *v1.GetStrip
 			logger.WithError(err).Error("Failed to lookup stripe customer from DB")
 		}
 
+		stripeCustomer, err := s.stripeClient.GetCustomer(ctx, customer.StripeCustomerID)
+		if err != nil {
+			logger.WithError(err).Error("Failed to fetch known customer from Stripe.")
+
+			return nil, status.Errorf(codes.NotFound, "Failed to find customer with ID %s: %s", customer.StripeCustomerID, err.Error())
+		}
 		return &v1.GetStripeCustomerResponse{
-			Customer: convertDBStripeCustomerToResponse(customer),
+			Customer: convertStripeCustomer(stripeCustomer),
 		}, nil
 
 	case *v1.GetStripeCustomerRequest_StripeCustomerId:
@@ -112,10 +118,18 @@ func (s *BillingService) GetStripeCustomer(ctx context.Context, req *v1.GetStrip
 			}
 
 			logger.WithError(err).Error("Failed to lookup stripe customer from DB")
+
+			return nil, status.Errorf(codes.NotFound, "Failed to lookup stripe customer from DB: %s", err.Error())
+		}
+		stripeCustomer, err := s.stripeClient.GetCustomer(ctx, customer.StripeCustomerID)
+		if err != nil {
+			logger.WithError(err).Error("Failed to fetch known customer from Stripe.")
+
+			return nil, status.Errorf(codes.NotFound, "Failed to find customer with ID %s: %s", customer.StripeCustomerID, err.Error())
 		}
 
 		return &v1.GetStripeCustomerResponse{
-			Customer: convertDBStripeCustomerToResponse(customer),
+			Customer: convertStripeCustomer(stripeCustomer),
 		}, nil
 
 	default:
@@ -321,11 +335,5 @@ func convertStripeCustomer(customer *stripe_api.Customer) *v1.StripeCustomer {
 	return &v1.StripeCustomer{
 		Id:       customer.ID,
 		Currency: customer.Metadata[stripe.PreferredCurrencyMetadataKey],
-	}
-}
-
-func convertDBStripeCustomerToResponse(cus db.StripeCustomer) *v1.StripeCustomer {
-	return &v1.StripeCustomer{
-		Id: cus.StripeCustomerID,
 	}
 }

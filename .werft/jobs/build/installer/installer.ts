@@ -1,6 +1,6 @@
 import { exec } from "../../../util/shell";
 import { Werft } from "../../../util/werft";
-import { CORE_DEV_KUBECONFIG_PATH, HARVESTER_KUBECONFIG_PATH, PREVIEW_K3S_KUBECONFIG_PATH } from "../const";
+import { CORE_DEV_KUBECONFIG_PATH, PREVIEW_K3S_KUBECONFIG_PATH } from "../const";
 
 export type Analytics = {
     type: string;
@@ -14,12 +14,7 @@ export type GitpodDaemonsetPorts = {
 
 export type InstallerOptions = {
     werft: Werft;
-    installerConfigPath: string;
-    kubeconfigPath: string;
     version: string;
-    domain: string;
-    previewName: string;
-    deploymentNamespace: string;
     analytics?: Analytics;
     withEELicense: boolean;
     workspaceFeatureFlags: string[];
@@ -35,11 +30,13 @@ export class Installer {
     install(slice: string): void {
         const environment = {
             VERSION: this.options.version,
-            INSTALLER_CONFIG_PATH: this.options.installerConfigPath,
-            // TODO: Pass in the ???_KUBE_CONTEXT too
             DEV_KUBE_PATH: CORE_DEV_KUBECONFIG_PATH,
-            HARVESTER_KUBE_PATH: HARVESTER_KUBECONFIG_PATH,
+            DEV_KUBE_CONTEXT: "TODO",
             PREVIEW_K3S_KUBE_PATH: PREVIEW_K3S_KUBECONFIG_PATH,
+            PREVIEW_K3S_KUBE_CONTEXT: "TODO",
+            GITPOD_ANALYTICS_SEGMENT_TOKEN: this.options.analytics?.token || "",
+            GITPOD_WORKSPACE_FEATURE_FLAGS: this.options.workspaceFeatureFlags.join(" "),
+            GITPOD_WITH_EE_LICENSE: this.options.withEELicense,
         };
         const variables = Object.entries(environment)
             .map(([key, value]) => `${key}="${value}"`)

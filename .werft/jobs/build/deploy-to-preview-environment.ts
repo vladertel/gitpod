@@ -38,21 +38,28 @@ interface DeploymentConfig {
     domain: string;
     monitoringDomain: string;
     url: string;
-    analytics?: string;
+    analytics?: Analytics;
     cleanSlateDeployment: boolean;
     installEELicense: boolean;
     withObservability: boolean;
 }
 
 export async function deployToPreviewEnvironment(werft: Werft, jobConfig: JobConfig) {
-    const { version, analytics, cleanSlateDeployment, withObservability, installEELicense, workspaceFeatureFlags } =
-        jobConfig;
+    const { version, cleanSlateDeployment, withObservability, installEELicense, workspaceFeatureFlags } = jobConfig;
 
     const { destname, namespace } = jobConfig.previewEnvironment;
 
     const domain = `${destname}.preview.gitpod-dev.com`;
     const monitoringDomain = `${destname}.preview.gitpod-dev.com`;
     const url = `https://${domain}`;
+
+    let analytics: Analytics | null;
+    if ((jobConfig.analytics || "").startsWith("segment|")) {
+        analytics = {
+            type: "segment",
+            token: jobConfig.analytics!.substring("segment|".length),
+        };
+    }
 
     const deploymentConfig: DeploymentConfig = {
         version,
@@ -151,37 +158,11 @@ export async function deployToPreviewEnvironment(werft: Werft, jobConfig: JobCon
         .finally(() => werft.done(sliceID));
 
     werft.phase(phases.DEPLOY, "deploying to dev with Installer");
-    await deployToDevWithInstaller(werft, deploymentConfig, workspaceFeatureFlags);
-}
-
-/*
- * Deploy a preview environment using the Installer
- */
-async function deployToDevWithInstaller(
-    werft: Werft,
-    deploymentConfig: DeploymentConfig,
-    workspaceFeatureFlags: string[],
-) {
-    const { version, namespace } = deploymentConfig;
-    const deploymentKubeconfig = PREVIEW_K3S_KUBECONFIG_PATH;
-
-    let analytics: Analytics | undefined;
-    if ((deploymentConfig.analytics || "").startsWith("segment|")) {
-        analytics = {
-            type: "segment",
-            token: deploymentConfig.analytics!.substring("segment|".length),
-        };
-    }
 
     const installer = new Installer({
         werft: werft,
-        installerConfigPath: "/tmp/config.yaml",
-        kubeconfigPath: deploymentKubeconfig,
-        version: version,
-        domain: deploymentConfig.domain,
-        previewName: deploymentConfig.destname,
-        deploymentNamespace: namespace,
-        analytics: analytics,
+        version: deploymentConfig.version,
+        analytics: deploymentConfig.analytics,
         withEELicense: deploymentConfig.installEELicense,
         workspaceFeatureFlags: workspaceFeatureFlags,
     });

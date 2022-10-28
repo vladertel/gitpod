@@ -27,9 +27,6 @@ pod:
   - name: prometheus-remote-write-auth
     secret:
       secretName: prometheus-remote-write-auth
-  - name: gpsh-harvester-license
-    secret:
-      secretName: gpsh-harvester-license
   - name: payment-provider-secret
     secret:
       secretName: payment-provider-secret
@@ -96,9 +93,6 @@ pod:
       readOnly: true
     - name: gcp-sa-release
       mountPath: /mnt/secrets/gcp-sa-release
-      readOnly: true
-    - name: gpsh-harvester-license
-      mountPath: /mnt/secrets/gpsh-harvester
       readOnly: true
     - name: payment-webhook-secret
       mountPath: /mnt/secrets/payment-webhook-config

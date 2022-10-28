@@ -10,8 +10,8 @@ source "$(realpath "${SCRIPT_PATH}/../lib/common.sh")"
 # shellcheck source=../../util/preview-name-from-branch.sh
 source "$(realpath "${SCRIPT_PATH}/../../util/preview-name-from-branch.sh")"
 
-DEV_KUBE_PATH="/home/gitpod/.kube/config"
-DEV_KUBE_CONTEXT="dev"
+DEV_KUBE_PATH="${DEV_KUBE_PATH:-/home/gitpod/.kube/config}"
+DEV_KUBE_CONTEXT="${DEV_KUBE_CONTEXT:-dev}"
 
 PREVIEW_NAME="$(preview-name-from-branch)"
 PREVIEW_K3S_KUBE_PATH="${PREVIEW_K3S_KUBECONFIG_PATH:-/home/gitpod/.kube/config}"
@@ -24,22 +24,26 @@ GITPOD_AGENT_SMITH_TOKEN="57B8fdFD68442a37E18B22bFD83638D451E087A047Eb4e4BF8BCc3
 GITPOD_CONTAINER_REGISTRY_URL="eu.gcr.io/gitpod-core-dev/build/";
 GITPOD_IMAGE_PULL_SECRET_NAME="gcp-sa-registry-auth";
 GITPOD_PROXY_SECRET_NAME="proxy-config-certificates";
+GITPOD_ANALYTICS_SEGMENT_TOKEN="${GITPOD_ANALYTICS_SEGMENT_TOKEN:-}"
+GITPOD_WITH_EE_LICENSE="${GITPOD_WITH_EE_LICENSE:-false}"
+GITPOD_WORKSPACE_FEATURE_FLAGS="${GITPOD_WORKSPACE_FEATURE_FLAGS:-}"
 
 VERSION="${VERSION:-$(preview-name-from-branch)-dev}"
+INSTALLER_BINARY_PATH="$(mktemp "/tmp/XXXXXX.installer")}"
 INSTALLER_CONFIG_PATH="${INSTALLER_CONFIG_PATH:-$(mktemp "/tmp/XXXXXX.gitpod.config.yaml")}"
 INSTALLER_RENDER_PATH="$(mktemp "/tmp/XXXXXX.gitpod.yaml")}"
 
-# Using /tmp/installer as that's what Werft expects (for now)
-docker run \
-    --entrypoint sh \
-    --rm \
-    --pull=always \
-    "eu.gcr.io/gitpod-core-dev/build/installer:${VERSION}" -c "cat /app/installer" \
-> /tmp/installer
-chmod +x /tmp/installer
-
 function installer {
-    /tmp/installer "$@"
+  if [[ ! -f ${INSTALLER_BINARY_PATH} ]]; then
+    docker run \
+      --entrypoint sh \
+      --rm \
+      --pull=always \
+      "eu.gcr.io/gitpod-core-dev/build/installer:${VERSION}" -c "cat /app/installer" \
+    > "${INSTALLER_BINARY_PATH}"
+    chmod +x "${INSTALLER_BINARY_PATH}"
+  fi
+  "${INSTALLER_BINARY_PATH}" "$@"
 }
 
 function copyCachedCertificate {
@@ -48,8 +52,8 @@ function copyCachedCertificate {
   DESTINATION_CERT_NAME="$GITPOD_PROXY_SECRET_NAME"
 
   kubectl \
-    --kubeconfig ${DEV_KUBE_PATH} \
-    --context ${DEV_KUBE_CONTEXT} \
+    --kubeconfig "${DEV_KUBE_PATH}" \
+    --context "${DEV_KUBE_CONTEXT}" \
     get secret "${SORUCE_CERT_NAME}" --namespace="${CERTS_NAMESPACE}" -o yaml \
   | yq d - 'metadata.namespace' \
   | yq d - 'metadata.uid' \
@@ -82,7 +86,7 @@ function copyImagePullSecret {
   fi
 
   imagePullAuth=$(
-    printf "%s" "_json_key:$(kubectl --kubeconfig ${DEV_KUBE_PATH} --context ${DEV_KUBE_CONTEXT} get secret ${GITPOD_IMAGE_PULL_SECRET_NAME} --namespace=keys -o yaml \
+    printf "%s" "_json_key:$(kubectl --kubeconfig "${DEV_KUBE_PATH}" --context "${DEV_KUBE_CONTEXT}" get secret ${GITPOD_IMAGE_PULL_SECRET_NAME} --namespace=keys -o yaml \
     | yq r - data['.dockerconfigjson'] \
     | base64 -d)" | base64 -w 0
   )
@@ -283,7 +287,7 @@ log_success "Generated config at $INSTALLER_CONFIG_PATH"
 #
 # configureAuthProviders
 #
-for row in $(kubectl --kubeconfig "$DEV_KUBE_PATH" --context=${DEV_KUBE_CONTEXT} get secret preview-envs-authproviders-harvester --namespace=keys -o jsonpath="{.data.authProviders}" \
+for row in $(kubectl --kubeconfig "$DEV_KUBE_PATH" --context "${DEV_KUBE_CONTEXT}" get secret preview-envs-authproviders-harvester --namespace=keys -o jsonpath="{.data.authProviders}" \
 | base64 -d -w 0 \
 | yq r - authProviders -j \
 | jq -r 'to_entries | .[] | @base64'); do
@@ -305,7 +309,7 @@ done
 #
 # configureStripeAPIKeys
 #
-kubectl --kubeconfig ${DEV_KUBE_PATH} --context "${DEV_KUBE_CONTEXT}" -n werft get secret stripe-api-keys -o yaml > stripe-api-keys.secret.yaml
+kubectl --kubeconfig "${DEV_KUBE_PATH}" --context "${DEV_KUBE_CONTEXT}" -n werft get secret stripe-api-keys -o yaml > stripe-api-keys.secret.yaml
 yq w -i stripe-api-keys.secret.yaml metadata.namespace "default"
 yq d -i stripe-api-keys.secret.yaml metadata.creationTimestamp
 yq d -i stripe-api-keys.secret.yaml metadata.uid
@@ -316,7 +320,7 @@ rm -f stripe-api-keys.secret.yaml
 #
 # configureSSHGateway
 #
-kubectl --kubeconfig ${DEV_KUBE_PATH} --context "${DEV_KUBE_CONTEXT}" --namespace keys get secret host-key -o yaml \
+kubectl --kubeconfig "${DEV_KUBE_PATH}" --context "${DEV_KUBE_CONTEXT}" --namespace keys get secret host-key -o yaml \
 | yq w - metadata.namespace ${PREVIEW_NAMESPACE} \
 | yq d - metadata.uid \
 | yq d - metadata.resourceVersion \
@@ -364,19 +368,19 @@ yq w -i "${INSTALLER_CONFIG_PATH}" 'workspace.templates.default.spec.containers[
 yq w -i "${INSTALLER_CONFIG_PATH}" 'workspace.templates.default.spec.containers.(name==workspace).env[+].name' "GITPOD_PREVENT_METADATA_ACCESS"
 yq w -i "${INSTALLER_CONFIG_PATH}" 'workspace.templates.default.spec.containers.(name==workspace).env.(name==GITPOD_PREVENT_METADATA_ACCESS).value' "true"
 
-# TODO: Pass the token (or find a way to read it) and conditionally decide (include or dontIncludeAnalytics)
 #
 # includeAnalytics
 #
-# yq w -i "${INSTALLER_CONFIG_PATH}" analytics.writer segment
-# yq w -i "${INSTALLER_CONFIG_PATH}" analytics.segmentKey ${this.options.analytics.token}
-# yq w -i "${INSTALLER_CONFIG_PATH}" 'workspace.templates.default.spec.containers.(name==workspace).env[+].name' "GITPOD_ANALYTICS_WRITER"
-# yq w -i "${INSTALLER_CONFIG_PATH}" 'workspace.templates.default.spec.containers.(name==workspace).env.(name==GITPOD_ANALYTICS_WRITER).value' "segment"
-# yq w -i "${INSTALLER_CONFIG_PATH}" 'workspace.templates.default.spec.containers.(name==workspace).env[+].name' "GITPOD_ANALYTICS_SEGMENT_KEY"
-# yq w -i "${INSTALLER_CONFIG_PATH}" 'workspace.templates.default.spec.containers.(name==workspace).env.(name==GITPOD_ANALYTICS_SEGMENT_KEY).value' "${this.options.analytics.token}"
-
-# dontIncludeAnalytics
-yq w -i "${INSTALLER_CONFIG_PATH}" analytics.writer ""
+if [[ -n "${GITPOD_ANALYTICS_SEGMENT_TOKEN}" ]]; then
+  yq w -i "${INSTALLER_CONFIG_PATH}" analytics.writer segment
+  yq w -i "${INSTALLER_CONFIG_PATH}" analytics.segmentKey "${GITPOD_ANALYTICS_SEGMENT_TOKEN}"
+  yq w -i "${INSTALLER_CONFIG_PATH}" 'workspace.templates.default.spec.containers.(name==workspace).env[+].name' "GITPOD_ANALYTICS_WRITER"
+  yq w -i "${INSTALLER_CONFIG_PATH}" 'workspace.templates.default.spec.containers.(name==workspace).env.(name==GITPOD_ANALYTICS_WRITER).value' "segment"
+  yq w -i "${INSTALLER_CONFIG_PATH}" 'workspace.templates.default.spec.containers.(name==workspace).env[+].name' "GITPOD_ANALYTICS_SEGMENT_KEY"
+  yq w -i "${INSTALLER_CONFIG_PATH}" 'workspace.templates.default.spec.containers.(name==workspace).env.(name==GITPOD_ANALYTICS_SEGMENT_KEY).value' "${GITPOD_ANALYTICS_SEGMENT_TOKEN}"
+else
+  yq w -i "${INSTALLER_CONFIG_PATH}" analytics.writer ""
+fi
 
 #
 # chargebee
@@ -414,11 +418,20 @@ installer render \
 #
 # configureLicense
 #
-# TODO: Read "this.options.withEELicense"
-WITH_EE_LICENSE="false"
-if [[ "${WITH_EE_LICENSE}" == "true" ]]
+if [[ "${GITPOD_WITH_EE_LICENSE}" == "true" ]]
 then
-  cp /mnt/secrets/gpsh-harvester/license /tmp/license
+  kubectl --kubeconfig "${DEV_KUBE_PATH}" --context "${DEV_KUBE_CONTEXT}" --namespace werft get secret gpsh-harvester-license
+  kubectl \
+    --kubeconfig "${DEV_KUBE_PATH}" \
+    --context "${DEV_KUBE_CONTEXT}" \
+    --namespace werft \
+    get secret "gpsh-harvester-license" -o yaml \
+  | yq d - 'metadata.namespace' \
+  | yq d - 'metadata.uid' \
+  | yq d - 'metadata.resourceVersion' \
+  | yq d - 'metadata.creationTimestamp' \
+  | yq d - 'metadata.ownerReferences' \
+  | sed "s/werft/${PREVIEW_NAMESPACE}/g" > /tmp/license
 else
   touch /tmp/license
 fi
@@ -426,11 +439,8 @@ fi
 #
 # configureWorkspaceFeatureFlags
 #
-
 touch /tmp/defaultFeatureFlags
-# TODO: Read "this.options.workspaceFeatureFlags"
-WORKSPACE_FEATURE_FLAGS=""
-for feature in ${WORKSPACE_FEATURE_FLAGS}; do
+for feature in ${GITPOD_WORKSPACE_FEATURE_FLAGS}; do
   # post-process.sh looks for /tmp/defaultFeatureFlags
   # each "flag" string gets added to the configmap
   # also watches aout for /tmp/payment

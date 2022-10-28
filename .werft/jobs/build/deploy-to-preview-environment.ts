@@ -145,6 +145,7 @@ export async function deployToPreviewEnvironment(werft: Werft, jobConfig: JobCon
 
     const installer = new Installer({
         werft: werft,
+        previewName: deploymentConfig.destname,
         version: deploymentConfig.version,
         analytics: deploymentConfig.analytics,
         withEELicense: deploymentConfig.installEELicense,

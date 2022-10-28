@@ -14,6 +14,7 @@ export type GitpodDaemonsetPorts = {
 
 export type InstallerOptions = {
     werft: Werft;
+    previewName: string;
     version: string;
     analytics?: Analytics;
     withEELicense: boolean;

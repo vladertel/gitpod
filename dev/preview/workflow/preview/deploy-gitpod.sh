@@ -13,7 +13,7 @@ source "$(realpath "${SCRIPT_PATH}/../../util/preview-name-from-branch.sh")"
 DEV_KUBE_PATH="${DEV_KUBE_PATH:-/home/gitpod/.kube/config}"
 DEV_KUBE_CONTEXT="${DEV_KUBE_CONTEXT:-dev}"
 
-PREVIEW_NAME="$(preview-name-from-branch)"
+PREVIEW_NAME="${PREVIEW_NAME:-$(preview-name-from-branch)}"
 PREVIEW_K3S_KUBE_PATH="${PREVIEW_K3S_KUBECONFIG_PATH:-/home/gitpod/.kube/config}"
 PREVIEW_K3S_KUBE_CONTEXT="${PREVIEW_K3S_KUBE_CONTEXT:-$PREVIEW_NAME}"
 PREVIEW_NAMESPACE="default"

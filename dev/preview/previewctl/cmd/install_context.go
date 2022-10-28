@@ -6,11 +6,12 @@ package cmd
 
 import (
 	"context"
-	"github.com/gitpod-io/gitpod/previewctl/pkg/preview"
 	"time"
 
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
+
+	"github.com/gitpod-io/gitpod/previewctl/pkg/preview"
 )
 
 type installContextOpts struct {
@@ -30,62 +31,17 @@ func newInstallContextCmd(logger *logrus.Logger) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "install-context",
 		Short: "Installs the kubectl context of a preview environment.",
+		PreRunE: func(cmd *cobra.Command, args []string) error {
+			getCredsCommand := newGetCredentialsCommand(logger)
+			return getCredsCommand.Execute()
+		},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			p, err := preview.New(branch, logger)
 			if err != nil {
 				return err
 			}
 
-			return p.Install(ctx)
-			//k, err := k8s.NewFromDefaultConfigWithContext(logger, "harvester")
-			//if err != nil {
-			//	return err
-			//}
-			//
-			//previewName, err := preview.GetName("")
-			//if err != nil {
-			//	return err
-			//}
-			//
-			//stopChan, readyChan := make(chan struct{}, 1), make(chan struct{}, 1)
-			//
-			//go func() {
-			//	err := k.PortForward(context.Background(), previewName, fmt.Sprintf("preview-%s", previewName), []string{"2200"}, stopChan, readyChan)
-			//	if err != nil {
-			//		logrus.Fatal(err)
-			//		return
-			//	}
-			//}()
-			//
-			//// block until port-forward is ready
-			//<-readyChan
-			//
-			//cfgGet, err := ssh.NewK3SConfigGetter(ctx, "127.0.0.1", "2200")
-			//if err != nil {
-			//	return err
-			//}
-			//
-			//kube, err := cfgGet.GetK3SContext(ctx)
-			//if err != nil {
-			//	return err
-			//}
-			//
-			////c, _ := clientcmd.Write(*kube)
-			////fmt.Println(string(c))
-			//
-			//k3sConfig, err := k8s.RenameConfig(kube, "default", previewName)
-			//if err != nil {
-			//	return err
-			//}
-			//
-			//k3sConfig.Clusters[previewName].Server = fmt.Sprintf("https://%s.kube.gitpod-dev.com:6443", previewName)
-			//
-			//fmt.Println("========================================================================")
-			//c, _ = clientcmd.Write(*k3sConfig)
-			//fmt.Println(string(c))
-			//
-			return nil
-			//return MergeContexts(opts.kubeConfigSavePath, k3sConfig)
+			return p.Install(ctx, opts.kubeConfigSavePath)
 		},
 	}
 

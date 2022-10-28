@@ -126,7 +126,7 @@ func RenameConfig(config *api.Config, oldName, newName string) (*api.Config, err
 	return config, nil
 }
 
-func MergeWithDefaultConfig(configs ...*api.Config) (*api.Config, error) {
+func MergeContextsWithDefault(configs ...*api.Config) (*api.Config, error) {
 	defaultConfig, err := clientcmd.NewDefaultClientConfigLoadingRules().Load()
 	if err != nil {
 		return nil, err
@@ -147,6 +147,21 @@ func MergeWithDefaultConfig(configs ...*api.Config) (*api.Config, error) {
 	}
 
 	return mapConfig, nil
+}
+
+func OutputContext(kubeConfigSavePath string, config *api.Config) error {
+	if kubeConfigSavePath != "" {
+		return clientcmd.WriteToFile(*config, kubeConfigSavePath)
+	}
+
+	bytes, err := clientcmd.Write(*config)
+	if err != nil {
+		return err
+	}
+
+	fmt.Println(string(bytes))
+
+	return err
 }
 
 func (c *Config) HasAccess() bool {

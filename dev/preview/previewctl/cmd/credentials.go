@@ -6,8 +6,6 @@ package cmd
 
 import (
 	"context"
-	"fmt"
-
 	"github.com/cockroachdb/errors"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
@@ -49,7 +47,7 @@ func newGetCredentialsCommand(logger *logrus.Logger) *cobra.Command {
 		Use: "get-credentials",
 		Long: `previewctl get-credentials retrieves the kubernetes configs for core-dev and harvester clusters,
 merges them with the default config, and outputs them either to stdout or to a file.`,
-		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+		PreRunE: func(cmd *cobra.Command, args []string) error {
 			client, err = gcloud.New(ctx, opts.serviceAccountPath)
 			if err != nil {
 				return err
@@ -80,7 +78,12 @@ merges them with the default config, and outputs them either to stdout or to a f
 				configs = append(configs, c)
 			}
 
-			return MergeContexts(opts.kubeConfigSavePath, configs...)
+			finalConfig, err := kube.MergeContextsWithDefault(configs...)
+			if err != nil {
+				return err
+			}
+
+			return kube.OutputContext(opts.kubeConfigSavePath, finalConfig)
 		},
 	}
 
@@ -141,29 +144,4 @@ func (o *getCredentialsOpts) getHarvesterKubeConfig(ctx context.Context) (*api.C
 	}
 
 	return harvesterConfig, nil
-}
-
-func MergeContexts(kubeConfigSavePath string, configs ...*api.Config) error {
-	toMerge := make([]*api.Config, 0, len(configs))
-	for _, config := range configs {
-		toMerge = append(toMerge, config)
-	}
-
-	finalConfig, err := kube.MergeWithDefaultConfig(toMerge...)
-	if err != nil {
-		return err
-	}
-
-	if kubeConfigSavePath != "" {
-		return clientcmd.WriteToFile(*finalConfig, kubeConfigSavePath)
-	}
-
-	bytes, err := clientcmd.Write(*finalConfig)
-	if err != nil {
-		return err
-	}
-
-	fmt.Println(string(bytes))
-
-	return err
 }

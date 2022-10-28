@@ -9,8 +9,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
-	"github.com/gitpod-io/gitpod/previewctl/pkg/ssh"
-	"k8s.io/client-go/tools/clientcmd"
 	"os"
 	"os/exec"
 	"regexp"
@@ -20,8 +18,11 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/sirupsen/logrus"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/tools/clientcmd"
+	"k8s.io/client-go/tools/clientcmd/api"
 
 	"github.com/gitpod-io/gitpod/previewctl/pkg/k8s"
+	"github.com/gitpod-io/gitpod/previewctl/pkg/ssh"
 )
 
 var (
@@ -148,10 +149,24 @@ func ensureVMICreationTime(p *Preview) {
 	}
 }
 
-func (p *Preview) Install(ctx context.Context) error {
-	k, err := k8s.NewFromDefaultConfigWithContext(p.logger.Logger, "harvester")
+func (p *Preview) Install(ctx context.Context, kubeConfigSavePath string) error {
+	cfg, err := p.GetPreviewContext(ctx)
 	if err != nil {
 		return err
+	}
+
+	merged, err := k8s.MergeContextsWithDefault(cfg)
+	if err != nil {
+		return err
+	}
+
+	return k8s.OutputContext(kubeConfigSavePath, merged)
+}
+
+func (p *Preview) GetPreviewContext(ctx context.Context) (*api.Config, error) {
+	k, err := k8s.NewFromDefaultConfigWithContext(p.logger.Logger, "harvester")
+	if err != nil {
+		return nil, err
 	}
 
 	stopChan, readyChan, errChan := make(chan struct{}, 1), make(chan struct{}, 1), make(chan error, 1)
@@ -175,33 +190,32 @@ func (p *Preview) Install(ctx context.Context) error {
 	case <-readyChan:
 		cfgGet, err := ssh.NewK3SConfigGetter(ctx, "127.0.0.1", "2200")
 		if err != nil {
-			return err
+			return nil, err
 		}
 
 		kube, err := cfgGet.GetK3SContext(ctx)
 		if err != nil {
-			return err
+			return nil, err
 		}
 
 		k3sConfig, err := k8s.RenameConfig(kube, "default", p.name)
 		if err != nil {
-			return err
+			return nil, err
 		}
 
 		k3sConfig.Clusters[p.name].Server = fmt.Sprintf("https://%s.kube.gitpod-dev.com:6443", p.name)
 
 		c, _ := clientcmd.Write(*k3sConfig)
-
 		p.logger.Debugln(string(c))
 
-		return nil
+		return k3sConfig, nil
 	case <-errChan:
-		return err
+		return nil, err
 	case <-time.After(time.Second * 2):
-		return errors.New("timed out waiting for port forward")
+		return nil, errors.New("timed out waiting for port forward")
 	case <-ctx.Done():
 		p.logger.Debug("context cancelled")
-		return ctx.Err()
+		return nil, ctx.Err()
 	}
 }
 

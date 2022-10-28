@@ -28,7 +28,7 @@ GITPOD_ANALYTICS_SEGMENT_TOKEN="${GITPOD_ANALYTICS_SEGMENT_TOKEN:-}"
 GITPOD_WITH_EE_LICENSE="${GITPOD_WITH_EE_LICENSE:-false}"
 GITPOD_WORKSPACE_FEATURE_FLAGS="${GITPOD_WORKSPACE_FEATURE_FLAGS:-}"
 
-VERSION="${VERSION:-$(preview-name-from-branch)-dev}"
+VERSION="${VERSION:-${PREVIEW_NAME}-dev}"
 INSTALLER_BINARY_PATH="$(mktemp "/tmp/XXXXXX.installer")}"
 INSTALLER_CONFIG_PATH="${INSTALLER_CONFIG_PATH:-$(mktemp "/tmp/XXXXXX.gitpod.config.yaml")}"
 INSTALLER_RENDER_PATH="k8s.yaml" # k8s.yaml is hardcoded in post-prcess.sh - we can fix that later.
@@ -72,16 +72,16 @@ function copyImagePullSecret {
   local exists
 
   # hasPullSecret
-  exists=$(
+  exists="$(
     kubectl \
       --kubeconfig "${PREVIEW_K3S_KUBE_PATH}" \
       --context "${PREVIEW_K3S_KUBE_CONTEXT}" \
       get secret ${GITPOD_IMAGE_PULL_SECRET_NAME} \
         -namespace "${PREVIEW_NAMESPACE}" \
         --ignore-not-found
-  )
+  )"
 
-  if [[ -z ${exists} ]]; then
+  if [[ -n "${exists}" ]]; then
     return
   fi
 
@@ -400,7 +400,7 @@ yq w -i "${INSTALLER_CONFIG_PATH}" "experimental.webapp.server.stripeConfig" "st
 installer validate config --config "$INSTALLER_CONFIG_PATH"
 
 # TODO: This doesn't support separate kubeconfig and kubectx yet so we need to find a way around that
-# installer validate cluster --kubeconfig "${HARVESTER_KUBE_PATH}" --config "${INSTALLER_CONFIG_PATH}"
+# installer validate cluster --kubeconfig "${PREVIEW_K3S_KUBE_PATH}" --config "${INSTALLER_CONFIG_PATH}"
 
 # ========
 # Render

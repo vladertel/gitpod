@@ -21,6 +21,7 @@ const (
 	coreDevProjectID          = "gitpod-core-dev"
 	coreDevClusterZone        = "europe-west1-b"
 	coreDevDesiredContextName = "dev"
+	harvesterContextName      = "harvester"
 )
 
 type getCredentialsOpts struct {
@@ -64,7 +65,7 @@ merges them with the default config, and outputs them either to stdout or to a f
 func (o *getCredentialsOpts) getCredentials(ctx context.Context) (*api.Config, error) {
 	// TODO: fix this as it's a bit ugly
 	var shouldRun bool
-	for _, kc := range []string{coreDevDesiredContextName, "harvester"} {
+	for _, kc := range []string{coreDevDesiredContextName, harvesterContextName} {
 		if ok := hasAccess(o.logger, kc); !ok {
 			shouldRun = true
 			break
@@ -87,7 +88,7 @@ func (o *getCredentialsOpts) getCredentials(ctx context.Context) (*api.Config, e
 	}
 
 	configs := make([]*api.Config, 0)
-	for _, kc := range []string{coreDevDesiredContextName, "harvester"} {
+	for _, kc := range []string{coreDevDesiredContextName, harvesterContextName} {
 		config, err := o.getCredentialsMap[kc](ctx)
 		if err != nil {
 			return nil, err
@@ -137,7 +138,7 @@ func (o *getCredentialsOpts) getHarvesterKubeConfig(ctx context.Context) (*api.C
 		o.configMap[coreDevDesiredContextName] = config
 	}
 
-	config, err := kube.GetClientConfigFromContext("harvester")
+	config, err := kube.GetClientConfigFromContext(harvesterContextName)
 	if err == nil {
 		return config, nil
 	}

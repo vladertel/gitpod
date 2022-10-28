@@ -5,7 +5,6 @@
 package cmd
 
 import (
-	"context"
 	"time"
 
 	"github.com/sirupsen/logrus"
@@ -23,7 +22,6 @@ type installContextOpts struct {
 }
 
 func newInstallContextCmd(logger *logrus.Logger) *cobra.Command {
-	ctx := context.Background()
 	opts := installContextOpts{
 		logger: logger,
 	}
@@ -43,7 +41,7 @@ func newInstallContextCmd(logger *logrus.Logger) *cobra.Command {
 			return nil
 		}
 
-		err = p.Install(ctx, opts.kubeConfigSavePath)
+		err = p.InstallContext(opts.watch, opts.timeout, opts.kubeConfigSavePath)
 		if err == nil {
 			lastSuccessfulPreviewEnvironment = p
 		}
@@ -55,9 +53,14 @@ func newInstallContextCmd(logger *logrus.Logger) *cobra.Command {
 		Use:   "install-context",
 		Short: "Installs the kubectl context of a preview environment.",
 		PreRunE: func(cmd *cobra.Command, args []string) error {
-			// TODO
-			getCredsCommand := newGetCredentialsCommand(logger)
-			return getCredsCommand.Execute()
+			// TODO fix: this is a bit of a hack to call the get-credentials command before install-context
+			// ideally we should get the (dev,harvester) contexts and merge with the k3s context at the end, and not call the command directly
+			// we only run this if we specify a path to save the context to, as otherwise it would get output twice
+			if opts.kubeConfigSavePath != "" {
+				return newGetCredentialsCommand(logger).Execute()
+			}
+
+			return nil
 		},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if opts.watch {

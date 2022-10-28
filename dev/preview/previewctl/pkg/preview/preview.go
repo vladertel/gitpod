@@ -34,11 +34,12 @@ var (
 const harvesterContextName = "harvester"
 
 type Preview struct {
-	branch    string
-	name      string
-	namespace string
+	branch       string
+	name         string
+	namespace    string
+	kubeSavePath string
 
-	kubeClient *k8s.Config
+	harvesterClient *k8s.Config
 
 	logger *logrus.Entry
 
@@ -62,42 +63,42 @@ func New(branch string, logger *logrus.Logger) (*Preview, error) {
 		branch:          branch,
 		namespace:       fmt.Sprintf("preview-%s", branch),
 		name:            branch,
-		kubeClient:      harvesterConfig,
+		harvesterClient: harvesterConfig,
 		logger:          logEntry,
 		vmiCreationTime: nil,
 	}, nil
 }
 
-func (p *Preview) InstallContext(wait bool, timeout time.Duration) error {
+func (p *Preview) InstallContext(wait bool, timeout time.Duration, kubeSavePath string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
-	p.logger.WithFields(logrus.Fields{"timeout": timeout}).Infof("Installing context")
+	p.logger.WithFields(logrus.Fields{"timeout": timeout}).Debug("Installing context")
 
 	// we use this channel to signal when we've found an event in wait functions, so we know when we're done
 	doneCh := make(chan struct{})
 	defer close(doneCh)
 
 	// TODO: fix this, as it's a bit ugly
-	err := p.kubeClient.GetVMStatus(ctx, p.name, p.namespace)
+	err := p.harvesterClient.GetVMStatus(ctx, p.name, p.namespace)
 	if err != nil && !errors.Is(err, k8s.ErrVmNotReady) {
 		return err
 	} else if errors.Is(err, k8s.ErrVmNotReady) && !wait {
 		return err
 	} else if errors.Is(err, k8s.ErrVmNotReady) && wait {
-		err = p.kubeClient.WaitVMReady(ctx, p.name, p.namespace, doneCh)
+		err = p.harvesterClient.WaitVMReady(ctx, p.name, p.namespace, doneCh)
 		if err != nil {
 			return err
 		}
 	}
 
-	err = p.kubeClient.GetProxyVMServiceStatus(ctx, p.namespace)
+	err = p.harvesterClient.GetProxyVMServiceStatus(ctx, p.namespace)
 	if err != nil && !errors.Is(err, k8s.ErrSvcNotReady) {
 		return err
 	} else if errors.Is(err, k8s.ErrSvcNotReady) && !wait {
 		return err
 	} else if errors.Is(err, k8s.ErrSvcNotReady) && wait {
-		err = p.kubeClient.WaitProxySvcReady(ctx, p.namespace, doneCh)
+		err = p.harvesterClient.WaitProxySvcReady(ctx, p.namespace, doneCh)
 		if err != nil {
 			return err
 		}
@@ -110,7 +111,7 @@ func (p *Preview) InstallContext(wait bool, timeout time.Duration) error {
 				return ctx.Err()
 			case <-time.Tick(5 * time.Second):
 				p.logger.Infof("waiting for context install to succeed")
-				err = installContext(p.branch)
+				err = p.Install(ctx, kubeSavePath)
 				if err == nil {
 					p.logger.Infof("Successfully installed context")
 					return nil
@@ -119,7 +120,7 @@ func (p *Preview) InstallContext(wait bool, timeout time.Duration) error {
 		}
 	}
 
-	return installContext(p.branch)
+	return p.Install(ctx, kubeSavePath)
 }
 
 // Same compares two preview envrionments
@@ -143,7 +144,7 @@ func ensureVMICreationTime(p *Preview) {
 	defer cancel()
 
 	if p.vmiCreationTime == nil {
-		creationTime, err := p.kubeClient.GetVMICreationTimestamp(ctx, p.name, p.namespace)
+		creationTime, err := p.harvesterClient.GetVMICreationTimestamp(ctx, p.name, p.namespace)
 		p.vmiCreationTime = creationTime
 		if err != nil {
 			p.logger.WithFields(logrus.Fields{"err": err}).Infof("Failed to get creation time")
@@ -166,17 +167,12 @@ func (p *Preview) Install(ctx context.Context, kubeConfigSavePath string) error 
 }
 
 func (p *Preview) GetPreviewContext(ctx context.Context) (*api.Config, error) {
-	k, err := k8s.NewFromDefaultConfigWithContext(p.logger.Logger, "harvester")
-	if err != nil {
-		return nil, err
-	}
-
 	stopChan, readyChan, errChan := make(chan struct{}, 1), make(chan struct{}, 1), make(chan error, 1)
 
 	// pick a random port, so we avoid clashes if something else port-forwards to 2200
 	randPort := strconv.Itoa(rand.Intn(2299-2201) + 2201)
 	go func() {
-		err := k.PortForward(ctx, k8s.PortForwardOpts{
+		err := p.harvesterClient.PortForward(ctx, k8s.PortForwardOpts{
 			Name:      p.name,
 			Namespace: p.namespace,
 			Ports: []string{
@@ -215,7 +211,7 @@ func (p *Preview) GetPreviewContext(ctx context.Context) (*api.Config, error) {
 		p.logger.Debugln(string(c))
 
 		return k3sConfig, nil
-	case <-errChan:
+	case err := <-errChan:
 		return nil, err
 	case <-time.After(time.Second * 2):
 		return nil, errors.New("timed out waiting for port forward")
@@ -226,7 +222,7 @@ func (p *Preview) GetPreviewContext(ctx context.Context) (*api.Config, error) {
 }
 
 func installContext(branch string) error {
-	return exec.Command("bash", "/workspace/gitpod/dev/preview/Install-k3s-kubeconfig.sh", "-b", branch).Run()
+	return exec.Command("bash", "/workspace/gitpod/dev/preview/install-k3s-kubeconfig.sh", "-b", branch).Run()
 }
 
 func SSHPreview(branch string) error {
@@ -286,8 +282,8 @@ func GetName(branch string) (string, error) {
 	return sanitizedBranch, nil
 }
 
-func (p *Preview) ListAllPreviews() error {
-	previews, err := p.kubeClient.GetVMs(context.Background())
+func (p *Preview) ListAllPreviews(ctx context.Context) error {
+	previews, err := p.harvesterClient.GetVMs(ctx)
 	if err != nil {
 		return err
 	}

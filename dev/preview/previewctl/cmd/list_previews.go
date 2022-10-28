@@ -5,6 +5,7 @@
 package cmd
 
 import (
+	"context"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 
@@ -26,7 +27,7 @@ func listPreviewsCmd(logger *logrus.Logger) *cobra.Command {
 				return err
 			}
 
-			err = p.ListAllPreviews()
+			err = p.ListAllPreviews(context.Background())
 			if err != nil {
 				logger.WithFields(logrus.Fields{"err": err}).Fatal("Failed to list previews.")
 			}

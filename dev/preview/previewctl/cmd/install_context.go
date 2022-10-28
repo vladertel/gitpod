@@ -6,9 +6,13 @@ package cmd
 
 import (
 	"context"
+	"fmt"
+	"io/fs"
+	"os"
 	"path/filepath"
 	"time"
 
+	"github.com/cockroachdb/errors"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 	"k8s.io/client-go/tools/clientcmd"
@@ -84,6 +88,13 @@ func newInstallContextCmd(logger *logrus.Logger) *cobra.Command {
 				return err
 			}
 
+			if _, err = os.Stat(opts.sshPrivateKeyPath); errors.Is(err, fs.ErrNotExist) {
+				err = preview.InstallVMSSHKeys()
+				if err != nil {
+					return err
+				}
+			}
+
 			return kube.OutputContext(opts.kubeConfigSavePath, configs)
 		},
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -109,8 +120,7 @@ func newInstallContextCmd(logger *logrus.Logger) *cobra.Command {
 	cmd.Flags().BoolVar(&opts.watch, "watch", false, "If watch is enabled, previewctl will keep trying to install the kube-context every 15 seconds.")
 	cmd.Flags().DurationVarP(&opts.timeout, "timeout", "t", 10*time.Minute, "Timeout before considering the installation failed")
 	cmd.PersistentFlags().StringVar(&opts.kubeConfigSavePath, "kube-save-path", "", "path to save the generated kubeconfig to")
-	cmd.PersistentFlags().StringVar(&opts.sshPrivateKeyPath, "private-key-path", "$HOME/.ssh/vm_id_rsa", "path to the private key used to authenticate with the VM")
-	cmd.PersistentFlags().StringVar(&opts.getCredentialsOpts.serviceAccountPath, "gcp-service-account", "", "path to the GCP service account to use")
+	cmd.PersistentFlags().StringVar(&opts.sshPrivateKeyPath, "private-key-path", fmt.Sprintf("%s/.ssh/vm_id_rsa", homedir.HomeDir()), "path to the private key used to authenticate with the VM")
 	cmd.PersistentFlags().StringVar(&opts.getCredentialsOpts.serviceAccountPath, "gcp-service-account", "", "path to the GCP service account to use")
 
 	return cmd

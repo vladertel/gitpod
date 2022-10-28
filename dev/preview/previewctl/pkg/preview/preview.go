@@ -232,6 +232,11 @@ func (p *Preview) GetPreviewContext(ctx context.Context, opts InstallCtxOpts) (*
 	}
 }
 
+func InstallVMSSHKeys() error {
+	// TODO reimplement in go
+	return exec.Command("bash", "/workspace/gitpod/dev/preview/util/install-vm-ssh-keys.sh").Run()
+}
+
 func installContext(branch string) error {
 	return exec.Command("bash", "/workspace/gitpod/dev/preview/install-k3s-kubeconfig.sh", "-b", branch).Run()
 }

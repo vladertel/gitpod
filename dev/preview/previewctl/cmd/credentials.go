@@ -63,6 +63,18 @@ merges them with the default config, and outputs them either to stdout or to a f
 }
 
 func (o *getCredentialsOpts) getCredentials(ctx context.Context) (*api.Config, error) {
+	// TODO fix this as it's a bit ugly
+	var shouldRun bool
+	for _, kc := range []string{coreDevDesiredContextName, "harvester"} {
+		if ok := hasAccess(o.logger, kc); !ok {
+			shouldRun = true
+		}
+	}
+
+	if !shouldRun {
+		return kube.MergeContextsWithDefault()
+	}
+
 	client, err := gcloud.New(ctx, o.serviceAccountPath)
 	if err != nil {
 		return nil, err

@@ -21,7 +21,7 @@ LOGS_DIR=$(mktemp -d)
 
 WEBAPP_TEST_LIST="$THIS_DIR/tests/components/database $THIS_DIR/tests/components/server"
 IDE_TEST_LIST="$THIS_DIR/tests/ide/ssh $THIS_DIR/tests/ide/vscode $THIS_DIR/tests/ide/jetbrains"
-WORKSPACE_TEST_LIST="$THIS_DIR/tests/components/content-service $THIS_DIR/tests/components/image-builder $THIS_DIR/tests/components/ws-daemon $THIS_DIR/tests/components/ws-manager $THIS_DIR/tests/workspace"
+WORKSPACE_TEST_LIST="$THIS_DIR/tests/workspace $THIS_DIR/tests/components/image-builder $THIS_DIR/tests/components/content-service $THIS_DIR/tests/components/ws-manager $THIS_DIR/tests/components/ws-daemon"
 
 case $TEST_SUITE in
   "webapp")
@@ -45,7 +45,6 @@ args=()
 args+=( "-kubeconfig=${KUBECONFIG:-/home/gitpod/.kube/config}" )
 args+=( "-namespace=default" )
 args+=( "-timeout=60m" )
-# args+=( "-p=2" )
 
 if [[ "${GITPOD_REPO_ROOT:-}" != "" ]]; then
   echo "Running in Gitpod workspace. Fetching USERNAME and USER_TOKEN" | werft log slice "test-setup"
@@ -63,25 +62,44 @@ werft log slice "test-setup" --done
 
 [[ "$USERNAME" != "" ]] && args+=( "-username=$USERNAME" )
 
-for TEST_PATH in ${TEST_LIST}
-do
-  TEST_NAME=$(basename "${TEST_PATH}")
+if [ "$TEST_SUITE" == "workspace" ]; then
+  TEST_NAME="workspace"
   LOG_FILE="${LOGS_DIR}/${TEST_NAME}.log"
   echo "running integration for ${TEST_NAME} - log file at ${LOG_FILE}" | werft log slice "test-${TEST_NAME}"
-
-  cd "${TEST_PATH}"
+  cd "$THIS_DIR"
   set +e
-  go test -v ./... "${args[@]}" 2>&1 | tee "${LOG_FILE}" | werft log slice "test-${TEST_NAME}"
+  # shellcheck disable=SC2086
+  go test -v $TEST_LIST "${args[@]}" 2>&1 | tee "${LOG_FILE}" | werft log slice "test-${TEST_NAME}"
   RC=${PIPESTATUS[0]}
   set -e
-  cd -
-
   if [ "${RC}" -ne "0" ]; then
     FAILURE_COUNT=$((FAILURE_COUNT+1))
     werft log slice "test-${TEST_NAME}" --fail "${RC}"
   else
     werft log slice "test-${TEST_NAME}" --done
   fi
-done
+  cd -
+else
+  for TEST_PATH in ${TEST_LIST}
+  do
+    TEST_NAME=$(basename "${TEST_PATH}")
+    LOG_FILE="${LOGS_DIR}/${TEST_NAME}.log"
+    echo "running integration for ""${TEST_NAME}"" - log file at ${LOG_FILE}" | werft log slice "test-${TEST_NAME}"
+
+    cd "${TEST_PATH}"
+    set +e
+    go test -v ./... "${args[@]}" 2>&1 | tee "${LOG_FILE}" | werft log slice "test-${TEST_NAME}"
+    RC=${PIPESTATUS[0]}
+    set -e
+    cd -
+
+    if [ "${RC}" -ne "0" ]; then
+      FAILURE_COUNT=$((FAILURE_COUNT+1))
+      werft log slice "test-${TEST_NAME}" --fail "${RC}"
+    else
+      werft log slice "test-${TEST_NAME}" --done
+    fi
+  done
+fi
 
 exit $FAILURE_COUNT

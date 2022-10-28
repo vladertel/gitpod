@@ -85,6 +85,15 @@ func TestBackup(t *testing.T) {
 					if err != nil {
 						t.Fatal(err)
 					}
+					t.Cleanup(func() {
+						sctx, scancel := context.WithTimeout(context.Background(), 5*time.Minute)
+						defer scancel()
+
+						sapi := integration.NewComponentAPI(sctx, cfg.Namespace(), kubeconfig, cfg.Client())
+						defer sapi.Done(t)
+
+						_, _ = stopWs1(false, sapi)
+					})
 
 					rsa, closer, err := integration.Instrument(integration.ComponentWorkspace, "workspace", cfg.Namespace(), kubeconfig, cfg.Client(),
 						integration.WithInstanceID(ws1.Req.Id),
@@ -140,7 +149,7 @@ func TestBackup(t *testing.T) {
 					if err != nil {
 						t.Fatal(err)
 					}
-					defer func() {
+					t.Cleanup(func() {
 						sctx, scancel := context.WithTimeout(context.Background(), 5*time.Minute)
 						defer scancel()
 
@@ -151,7 +160,7 @@ func TestBackup(t *testing.T) {
 						if err != nil {
 							t.Errorf("cannot stop workspace: %q", err)
 						}
-					}()
+					})
 
 					rsa, closer, err = integration.Instrument(integration.ComponentWorkspace, "workspace", cfg.Namespace(), kubeconfig, cfg.Client(),
 						integration.WithInstanceID(ws2.Req.Id),
@@ -236,6 +245,15 @@ func TestExistingWorkspaceEnablePVC(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
+				t.Cleanup(func() {
+					sctx, scancel := context.WithTimeout(context.Background(), 5*time.Minute)
+					defer scancel()
+
+					sapi := integration.NewComponentAPI(sctx, cfg.Namespace(), kubeconfig, cfg.Client())
+					defer sapi.Done(t)
+
+					_, _ = stopWs1(false, sapi)
+				})
 
 				rsa, closer, err := integration.Instrument(integration.ComponentWorkspace, "workspace", cfg.Namespace(), kubeconfig, cfg.Client(),
 					integration.WithInstanceID(ws1.Req.Id),
@@ -284,15 +302,17 @@ func TestExistingWorkspaceEnablePVC(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
+
 				t.Cleanup(func() {
-					sctx, scancel := context.WithTimeout(context.Background(), 5*time.Minute)
+					sctx, scancel := context.WithTimeout(context.Background(), 10*time.Minute)
 					defer scancel()
 
 					sapi := integration.NewComponentAPI(sctx, cfg.Namespace(), kubeconfig, cfg.Client())
 					defer sapi.Done(t)
-					_, err = stopWs2(true, sapi)
+
+					_, err := stopWs2(true, sapi)
 					if err != nil {
-						t.Errorf("cannot stop workspace: %q", err)
+						t.Fatal(err)
 					}
 				})
 
@@ -350,20 +370,7 @@ func TestMissingBackup(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			wsm, err := api.WorkspaceManager()
-			if err != nil {
-				if _, err := stopWs(true, api); err != nil {
-					t.Errorf("cannot stop workspace: %q", err)
-				}
-				t.Fatal(err)
-			}
-
-			_, err = wsm.StopWorkspace(ctx, &wsmanapi.StopWorkspaceRequest{Id: ws.Req.Id})
-			if err != nil {
-				t.Fatal(err)
-			}
-
-			_, err = integration.WaitForWorkspaceStop(ctx, api, ws.Req.Id)
+			_, err = stopWs(true, api)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -391,7 +398,12 @@ func TestMissingBackup(t *testing.T) {
 			}
 			for _, test := range tests {
 				t.Run(test.Name+"_backup_init", func(t *testing.T) {
-					testws, stopWs, err := integration.LaunchWorkspaceDirectly(t, ctx, api, integration.WithRequestModifier(func(w *wsmanapi.StartWorkspaceRequest) error {
+					t.Parallel()
+
+					ctx, cancel := context.WithTimeout(context.Background(), time.Duration(5*len(tests))*time.Minute)
+					defer cancel()
+
+					testws, stopWs2, err := integration.LaunchWorkspaceDirectly(t, ctx, api, integration.WithRequestModifier(func(w *wsmanapi.StartWorkspaceRequest) error {
 						w.ServicePrefix = ws.Req.ServicePrefix
 						w.Metadata.MetaId = ws.Req.Metadata.MetaId
 						w.Metadata.Owner = ws.Req.Metadata.Owner
@@ -407,15 +419,24 @@ func TestMissingBackup(t *testing.T) {
 						t.Fatal(err)
 					}
 
+					t.Cleanup(func() {
+						sctx, scancel := context.WithTimeout(context.Background(), 5*time.Minute)
+						defer scancel()
+
+						sapi := integration.NewComponentAPI(sctx, cfg.Namespace(), kubeconfig, cfg.Client())
+						defer sapi.Done(t)
+
+						_, err := stopWs2(true, sapi)
+						if err != nil {
+							t.Fatal(err)
+						}
+					})
+
 					if testws.LastStatus == nil {
 						t.Fatal("did not receive a last status")
 						return
 					}
 					if testws.LastStatus.Conditions.Failed == "" {
-						_, err = stopWs(true, api)
-						if err != nil {
-							t.Errorf("cannot stop workspace: %q", err)
-						}
 						t.Errorf("restarted workspace did not fail despite missing backup, %v", testws)
 					}
 				})

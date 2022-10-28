@@ -115,13 +115,11 @@ func hasAccess(logger *logrus.Logger, contextName string) bool {
 }
 
 func (o *getCredentialsOpts) getCoreDevKubeConfig(ctx context.Context) (*api.Config, error) {
-	if _, ok := o.configMap[coreDevDesiredContextName]; !ok {
-		config, err := kube.GetClientConfigFromContext(coreDevDesiredContextName)
-		if err == nil {
-			return config, err
-		}
+	config, err := kube.GetClientConfigFromContext(coreDevDesiredContextName)
+	if err == nil {
+		return config, err
 	}
- 
+
 	coreDevConfig, err := o.gcpClient.GenerateConfig(ctx, coreDevClusterName, coreDevProjectID, coreDevClusterZone, coreDevDesiredContextName)
 	if err != nil {
 		return nil, err
@@ -138,6 +136,11 @@ func (o *getCredentialsOpts) getHarvesterKubeConfig(ctx context.Context) (*api.C
 		}
 
 		o.configMap[coreDevDesiredContextName] = config
+	}
+
+	config, err := kube.GetClientConfigFromContext("harvester")
+	if err == nil {
+		return config, err
 	}
 
 	coreDevClientConfig, err := clientcmd.NewNonInteractiveClientConfig(*o.configMap[coreDevDesiredContextName], coreDevDesiredContextName, nil, nil).ClientConfig()

@@ -1,12 +1,7 @@
 import * as fs from "fs";
-import { exec, ExecOptions } from "../../util/shell";
+import { exec } from "../../util/shell";
 import { MonitoringSatelliteInstaller } from "../../observability/monitoring-satellite";
-import {
-    createNamespace,
-    waitForApiserver,
-} from "../../util/kubectl";
 
-import { env } from "../../util/util";
 import { CORE_DEV_KUBECONFIG_PATH, PREVIEW_K3S_KUBECONFIG_PATH } from "./const";
 import { Werft } from "../../util/werft";
 import { JobConfig } from "./job-config";
@@ -26,32 +21,19 @@ const phases = {
 };
 
 const installerSlices = {
-    IMAGE_PULL_SECRET: "image pull secret",
-    CLEAN_ENV_STATE: "clean envirionment",
     INSTALL: "Generate, validate, and install Gitpod",
-    DEPLOYMENT_WAITING: "monitor server deployment",
 };
 
 const vmSlices = {
     VM_READINESS: "Waiting for VM readiness",
-    START_KUBECTL_PORT_FORWARDS: "Start kubectl port forwards",
-    COPY_CERT_MANAGER_RESOURCES: "Copy CertManager resources from core-dev",
     INSTALL_CERT_ISSUER: "Install Certificate Issuer",
     KUBECONFIG: "Getting kubeconfig",
-    WAIT_K3S: "Waiting for k3s",
-    WAIT_CERTMANAGER: "Waiting for Cert-Manager",
     EXTERNAL_LOGGING: "Install credentials to send logs from fluent-bit to GCP",
 };
 
 export async function deployToPreviewEnvironment(werft: Werft, jobConfig: JobConfig) {
-    const {
-        version,
-        analytics,
-        cleanSlateDeployment,
-        withObservability,
-        installEELicense,
-        workspaceFeatureFlags,
-    } = jobConfig;
+    const { version, analytics, cleanSlateDeployment, withObservability, installEELicense, workspaceFeatureFlags } =
+        jobConfig;
 
     const { destname, namespace } = jobConfig.previewEnvironment;
 
@@ -165,20 +147,10 @@ export async function deployToPreviewEnvironment(werft: Werft, jobConfig: JobCon
 async function deployToDevWithInstaller(
     werft: Werft,
     deploymentConfig: DeploymentConfig,
-    workspaceFeatureFlags: string[]
+    workspaceFeatureFlags: string[],
 ) {
     const { version, namespace } = deploymentConfig;
     const deploymentKubeconfig = PREVIEW_K3S_KUBECONFIG_PATH;
-
-    // clean environment state
-    // TODO: I think we can rid of this - we're using the default namespace now
-    try {
-        werft.log(installerSlices.CLEAN_ENV_STATE, "Clean the preview environment slate...");
-        createNamespace(namespace, deploymentKubeconfig, metaEnv({ slice: installerSlices.CLEAN_ENV_STATE }));
-        werft.done(installerSlices.CLEAN_ENV_STATE);
-    } catch (err) {
-        werft.fail(installerSlices.CLEAN_ENV_STATE, err);
-    }
 
     let analytics: Analytics | undefined;
     if ((deploymentConfig.analytics || "").startsWith("segment|")) {
@@ -198,23 +170,17 @@ async function deployToDevWithInstaller(
         deploymentNamespace: namespace,
         analytics: analytics,
         withEELicense: deploymentConfig.installEELicense,
-        workspaceFeatureFlags: workspaceFeatureFlags
+        workspaceFeatureFlags: workspaceFeatureFlags,
     });
     try {
         werft.log(phases.DEPLOY, "deploying using installer");
         installer.install(installerSlices.INSTALL);
-        exec(`werft log result -d "dev installation" -c github-check-preview-env url https://${domain}/workspaces`)
+        exec(
+            `werft log result -d "dev installation" -c github-check-preview-env url https://${deploymentConfig.domain}/workspaces`,
+        );
     } catch (err) {
         werft.fail(phases.DEPLOY, err);
     }
-
-    werft.log(installerSlices.DEPLOYMENT_WAITING, "Waiting until all pods are ready.");
-    await waitUntilAllPodsAreReady(deploymentConfig.namespace, installer.options.kubeconfigPath, {
-        slice: installerSlices.DEPLOYMENT_WAITING,
-    });
-    werft.done(installerSlices.DEPLOYMENT_WAITING);
-
-    werft.done(phases.DEPLOY);
 }
 
 interface DeploymentConfig {
@@ -228,8 +194,4 @@ interface DeploymentConfig {
     cleanSlateDeployment: boolean;
     installEELicense: boolean;
     withObservability: boolean;
-}
-
-function metaEnv(_parent?: ExecOptions): ExecOptions {
-    return env("", _parent);
 }

@@ -34,18 +34,17 @@ export class Installer {
 
     install(slice: string): void {
         const environment = {
-            "VERSION": this.options.version,
-            "INSTALLER_CONFIG_PATH": this.options.installerConfigPath,
+            VERSION: this.options.version,
+            INSTALLER_CONFIG_PATH: this.options.installerConfigPath,
             // TODO: Pass in the ???_KUBE_CONTEXT too
-            "DEV_KUBE_PATH": CORE_DEV_KUBECONFIG_PATH,
-            "HARVESTER_KUBE_PATH": HARVESTER_KUBECONFIG_PATH,
-            "PREVIEW_K3S_KUBE_PATH": PREVIEW_K3S_KUBECONFIG_PATH
-        }
-        const variables = Object
-            .entries(environment)
+            DEV_KUBE_PATH: CORE_DEV_KUBECONFIG_PATH,
+            HARVESTER_KUBE_PATH: HARVESTER_KUBECONFIG_PATH,
+            PREVIEW_K3S_KUBE_PATH: PREVIEW_K3S_KUBECONFIG_PATH,
+        };
+        const variables = Object.entries(environment)
             .map(([key, value]) => `${key}="${value}"`)
-            .join(" ")
-        exec(`${variables} leeway run dev/preview:deploy-gitpod`, {slice: slice})
+            .join(" ");
+        exec(`${variables} leeway run dev/preview:deploy-gitpod`, { slice: slice });
         this.options.werft.done(slice);
     }
 }

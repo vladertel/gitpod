@@ -14,6 +14,7 @@ import {
 import { ValueTransformer } from "typeorm/decorator/options/ValueTransformer";
 
 @Entity()
+// on DB but not Typeorm: @Index("ind_lastModified", ["_lastModified"])   // DBSync
 export class DBWorkspaceCluster implements WorkspaceCluster {
     @PrimaryColumn()
     name: string;
@@ -84,4 +85,10 @@ export class DBWorkspaceCluster implements WorkspaceCluster {
         })(),
     })
     admissionConstraints?: AdmissionConstraint[];
+
+    @Column({
+        type: "varchar",
+        length: 60,
+    })
+    applicationCluster: string;
 }

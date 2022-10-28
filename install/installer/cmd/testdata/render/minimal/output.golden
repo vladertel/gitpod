@@ -1261,6 +1261,26 @@ data:
                 "replacement": "open-vsx.gitpod.example.com"
               },
               {
+                "path": "/ide/out/vs/workbench/workbench.web.api.js",
+                "search": "{{extensionsGalleryItemUrl}}",
+                "replacement": "https://open-vsx.org/vscode/item"
+              },
+              {
+                "path": "/ide/out/vs/workbench/workbench.web.main.js",
+                "search": "{{extensionsGalleryItemUrl}}",
+                "replacement": "https://open-vsx.org/vscode/item"
+              },
+              {
+                "path": "/ide/out/vs/workbench/workbench.web.api.js",
+                "search": "{{trustedDomain}}",
+                "replacement": "https://open-vsx.org"
+              },
+              {
+                "path": "/ide/out/vs/workbench/workbench.web.main.js",
+                "search": "{{trustedDomain}}",
+                "replacement": "https://open-vsx.org"
+              },
+              {
                 "path": "/ide/out/vs/workbench/workbench.web.main.js",
                 "search": "ide.gitpod.io/code/markeplace.json",
                 "replacement": "ide.gitpod.example.com/code/marketplace.json"
@@ -8219,7 +8239,7 @@ spec:
   template:
     metadata:
       annotations:
-        gitpod.io/checksum_config: 9a515b004a89b33642ea51cf15082f48f0912d8ca3d54c20bfc2f032e550931c
+        gitpod.io/checksum_config: 4d62a8495409c63539b2be0b07f2419f62c10bed198b7e1e7550265c67d5412c
       creationTimestamp: null
       labels:
         app: gitpod

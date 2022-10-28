@@ -31,6 +31,19 @@ const vmSlices = {
     EXTERNAL_LOGGING: "Install credentials to send logs from fluent-bit to GCP",
 };
 
+interface DeploymentConfig {
+    version: string;
+    destname: string;
+    namespace: string;
+    domain: string;
+    monitoringDomain: string;
+    url: string;
+    analytics?: string;
+    cleanSlateDeployment: boolean;
+    installEELicense: boolean;
+    withObservability: boolean;
+}
+
 export async function deployToPreviewEnvironment(werft: Werft, jobConfig: JobConfig) {
     const { version, analytics, cleanSlateDeployment, withObservability, installEELicense, workspaceFeatureFlags } =
         jobConfig;
@@ -179,19 +192,6 @@ async function deployToDevWithInstaller(
             `werft log result -d "dev installation" -c github-check-preview-env url https://${deploymentConfig.domain}/workspaces`,
         );
     } catch (err) {
-        werft.fail(phases.DEPLOY, err);
+        werft.fail(installerSlices.INSTALL, err);
     }
-}
-
-interface DeploymentConfig {
-    version: string;
-    destname: string;
-    namespace: string;
-    domain: string;
-    monitoringDomain: string;
-    url: string;
-    analytics?: string;
-    cleanSlateDeployment: boolean;
-    installEELicense: boolean;
-    withObservability: boolean;
 }

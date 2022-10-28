@@ -12,26 +12,22 @@ source "$(realpath "${SCRIPT_PATH}/../../util/preview-name-from-branch.sh")"
 
 DEV_KUBE_PATH="/home/gitpod/.kube/config"
 DEV_KUBE_CONTEXT="dev"
-# HARVESTER_KUBE_PATH="/home/gitpod/.kube/config"
-# HARVESTER_KUBE_CONTEXT="harvester"
 
 PREVIEW_NAME="$(preview-name-from-branch)"
 PREVIEW_K3S_KUBE_PATH="${PREVIEW_K3S_KUBECONFIG_PATH:-/home/gitpod/.kube/config}"
 PREVIEW_K3S_KUBE_CONTEXT="${PREVIEW_K3S_KUBE_CONTEXT:-$PREVIEW_NAME}"
+PREVIEW_NAMESPACE="default"
 
 # TODO: Figure out why Leeway doesn't like this.
-# AGENT_SMITH_TOKEN="$(tr -dc 'A-Fa-f0-9' < /dev/urandom | head -c61)"
-AGENT_SMITH_TOKEN="57B8fdFD68442a37E18B22bFD83638D451E087A047Eb4e4BF8BCc3EdF5825"
-
-CONTAINER_REGISTRY_URL="eu.gcr.io/gitpod-core-dev/build/";
-IMAGE_PULL_SECRET_NAME="gcp-sa-registry-auth";
-PROXY_SECRET_NAME="proxy-config-certificates";
-
-INSTALLATION_NAMESPACE="default"
-PATH_TO_RENDERED_YAML="k8s.yaml"
+# GITPOD_AGENT_SMITH_TOKEN="$(tr -dc 'A-Fa-f0-9' < /dev/urandom | head -c61)"
+GITPOD_AGENT_SMITH_TOKEN="57B8fdFD68442a37E18B22bFD83638D451E087A047Eb4e4BF8BCc3EdF5825"
+GITPOD_CONTAINER_REGISTRY_URL="eu.gcr.io/gitpod-core-dev/build/";
+GITPOD_IMAGE_PULL_SECRET_NAME="gcp-sa-registry-auth";
+GITPOD_PROXY_SECRET_NAME="proxy-config-certificates";
 
 VERSION="${VERSION:-$(preview-name-from-branch)-dev}"
 INSTALLER_CONFIG_PATH="${INSTALLER_CONFIG_PATH:-$(mktemp "/tmp/XXXXXX.gitpod.config.yaml")}"
+INSTALLER_RENDER_PATH="$(mktemp "/tmp/XXXXXX.gitpod.yaml")}"
 
 # Using /tmp/installer as that's what Werft expects (for now)
 docker run \
@@ -49,7 +45,7 @@ function installer {
 function copyCachedCertificate {
   CERTS_NAMESPACE="certs"
   SORUCE_CERT_NAME="harvester-${PREVIEW_NAME}"
-  DESTINATION_CERT_NAME="$PROXY_SECRET_NAME"
+  DESTINATION_CERT_NAME="$GITPOD_PROXY_SECRET_NAME"
 
   kubectl \
     --kubeconfig ${DEV_KUBE_PATH} \
@@ -64,21 +60,20 @@ function copyCachedCertificate {
   | kubectl \
       --kubeconfig "${PREVIEW_K3S_KUBE_PATH}" \
       --context "${PREVIEW_K3S_KUBE_CONTEXT}" \
-      apply --namespace="${INSTALLATION_NAMESPACE}" -f -
+      apply --namespace="${PREVIEW_NAMESPACE}" -f -
 }
 
 # Used by blobserve
 function copyImagePullSecret {
   local exists
-  IMAGE_PULL_SECRET_NAME="gcp-sa-registry-auth"
 
   # hasPullSecret
   exists=$(
     kubectl \
       --kubeconfig "${PREVIEW_K3S_KUBE_PATH}" \
       --context "${PREVIEW_K3S_KUBE_CONTEXT}" \
-      get secret ${IMAGE_PULL_SECRET_NAME} \
-        -namespace "${INSTALLATION_NAMESPACE}" \
+      get secret ${GITPOD_IMAGE_PULL_SECRET_NAME} \
+        -namespace "${PREVIEW_NAMESPACE}" \
         --ignore-not-found
   )
 
@@ -87,12 +82,12 @@ function copyImagePullSecret {
   fi
 
   imagePullAuth=$(
-    printf "%s" "_json_key:$(kubectl --kubeconfig ${DEV_KUBE_PATH} --context ${DEV_KUBE_CONTEXT} get secret ${IMAGE_PULL_SECRET_NAME} --namespace=keys -o yaml \
+    printf "%s" "_json_key:$(kubectl --kubeconfig ${DEV_KUBE_PATH} --context ${DEV_KUBE_CONTEXT} get secret ${GITPOD_IMAGE_PULL_SECRET_NAME} --namespace=keys -o yaml \
     | yq r - data['.dockerconfigjson'] \
     | base64 -d)" | base64 -w 0
   )
 
-  cat <<EOF > "${IMAGE_PULL_SECRET_NAME}"
+  cat <<EOF > "${GITPOD_IMAGE_PULL_SECRET_NAME}"
   {
     "auths": {
       "eu.gcr.io": { "auth": "${imagePullAuth}" },
@@ -104,11 +99,11 @@ EOF
   kubectl \
     --kubeconfig "${PREVIEW_K3S_KUBE_PATH}" \
     --context "${PREVIEW_K3S_KUBE_CONTEXT}" \
-    create secret docker-registry ${IMAGE_PULL_SECRET_NAME} \
-      --namespace ${INSTALLATION_NAMESPACE} \
-      --from-file=.dockerconfigjson=./${IMAGE_PULL_SECRET_NAME}
+    create secret docker-registry ${GITPOD_IMAGE_PULL_SECRET_NAME} \
+      --namespace ${PREVIEW_NAMESPACE} \
+      --from-file=.dockerconfigjson=./${GITPOD_IMAGE_PULL_SECRET_NAME}
 
-  rm -f ${IMAGE_PULL_SECRET_NAME}
+  rm -f ${GITPOD_IMAGE_PULL_SECRET_NAME}
 }
 
 function waitUntilAllPodsAreReady {
@@ -174,10 +169,7 @@ function waitUntilAllPodsAreReady {
 waitUntilAllPodsAreReady "kube-system"
 waitUntilAllPodsAreReady "cert-manager"
 
-# ====================================
-# Copy over resources from dev cluster
-# ====================================
-
+# Note: These should ideally be handled by `leeway run dev/preview:create`
 copyCachedCertificate
 copyImagePullSecret
 
@@ -216,11 +208,11 @@ rm shortname.yaml
 #
 # configureContainerRegistry
 #
-yq w -i "${INSTALLER_CONFIG_PATH}" certificate.name "${PROXY_SECRET_NAME}"
+yq w -i "${INSTALLER_CONFIG_PATH}" certificate.name "${GITPOD_PROXY_SECRET_NAME}"
 yq w -i "${INSTALLER_CONFIG_PATH}" containerRegistry.inCluster "false"
-yq w -i "${INSTALLER_CONFIG_PATH}" containerRegistry.external.url "${CONTAINER_REGISTRY_URL}"
+yq w -i "${INSTALLER_CONFIG_PATH}" containerRegistry.external.url "${GITPOD_CONTAINER_REGISTRY_URL}"
 yq w -i "${INSTALLER_CONFIG_PATH}" containerRegistry.external.certificate.kind secret
-yq w -i "${INSTALLER_CONFIG_PATH}" containerRegistry.external.certificate.name "${IMAGE_PULL_SECRET_NAME}"
+yq w -i "${INSTALLER_CONFIG_PATH}" containerRegistry.external.certificate.name "${GITPOD_IMAGE_PULL_SECRET_NAME}"
 
 #
 # configureDomain
@@ -302,7 +294,7 @@ for row in $(kubectl --kubeconfig "$DEV_KUBE_PATH" --context=${DEV_KUBE_CONTEXT}
     yq w -i "${INSTALLER_CONFIG_PATH}" authProviders["$key"].name "$providerId"
 
     kubectl create secret generic "$providerId" \
-        --namespace "${INSTALLATION_NAMESPACE}" \
+        --namespace "${PREVIEW_NAMESPACE}" \
         --kubeconfig "${PREVIEW_K3S_KUBE_PATH}" \
         --context "${PREVIEW_K3S_KUBE_CONTEXT}" \
         --from-literal=provider="$data" \
@@ -325,7 +317,7 @@ rm -f stripe-api-keys.secret.yaml
 # configureSSHGateway
 #
 kubectl --kubeconfig ${DEV_KUBE_PATH} --context "${DEV_KUBE_CONTEXT}" --namespace keys get secret host-key -o yaml \
-| yq w - metadata.namespace ${INSTALLATION_NAMESPACE} \
+| yq w - metadata.namespace ${PREVIEW_NAMESPACE} \
 | yq d - metadata.uid \
 | yq d - metadata.resourceVersion \
 | yq d - metadata.creationTimestamp \
@@ -412,8 +404,8 @@ installer validate config --config "$INSTALLER_CONFIG_PATH"
 
 installer render \
   --use-experimental-config \
-  --namespace "${INSTALLATION_NAMESPACE}" \
-  --config "${INSTALLER_CONFIG_PATH}" > "${PATH_TO_RENDERED_YAML}"
+  --namespace "${PREVIEW_NAMESPACE}" \
+  --config "${INSTALLER_CONFIG_PATH}" > "${INSTALLER_RENDER_PATH}"
 
 # ===============
 # Post-processing
@@ -457,7 +449,7 @@ PAYMENT_ENDPOINT_VERSION="$(yq r /tmp/versions.yaml 'components.paymentEndpoint.
 # 2. render chargebee-config and payment-endpoint
 rm -f /tmp/payment
 for manifest in "$ROOT"/.werft/jobs/build/payment/*.yaml; do
-  sed "s/\${NAMESPACE}/${INSTALLATION_NAMESPACE}/g" "$manifest" \
+  sed "s/\${NAMESPACE}/${PREVIEW_NAMESPACE}/g" "$manifest" \
   | sed "s/\${PAYMENT_ENDPOINT_VERSION}/${PAYMENT_ENDPOINT_VERSION}/g" \
   | sed "s/\${SERVICE_WAITER_VERSION}/${SERVICE_WAITER_VERSION}/g" \
   >> /tmp/payment
@@ -468,7 +460,7 @@ done
 # Run post-process script
 #
 
-WITH_VM=true "$ROOT/.werft/jobs/build/installer/post-process.sh" "${PREVIEW_NAME}" "${AGENT_SMITH_TOKEN}"
+WITH_VM=true "$ROOT/.werft/jobs/build/installer/post-process.sh" "${PREVIEW_NAME}" "${GITPOD_AGENT_SMITH_TOKEN}"
 
 #
 # Cleanup from post-processing
@@ -480,14 +472,14 @@ rm -f /tmp/license
 # ===============
 # Install
 # ===============
-kubectl --kubeconfig "${PREVIEW_K3S_KUBE_PATH}" --context "${PREVIEW_K3S_KUBE_CONTEXT}" delete -n "${INSTALLATION_NAMESPACE}" job migrations || true
-kubectl --kubeconfig "${PREVIEW_K3S_KUBE_PATH}" --context "${PREVIEW_K3S_KUBE_CONTEXT}" apply -f "${PATH_TO_RENDERED_YAML}"
-rm -f "${PATH_TO_RENDERED_YAML}"
+kubectl --kubeconfig "${PREVIEW_K3S_KUBE_PATH}" --context "${PREVIEW_K3S_KUBE_CONTEXT}" delete -n "${PREVIEW_NAMESPACE}" job migrations || true
+kubectl --kubeconfig "${PREVIEW_K3S_KUBE_PATH}" --context "${PREVIEW_K3S_KUBE_CONTEXT}" apply -f "${INSTALLER_RENDER_PATH}"
+rm -f "${INSTALLER_RENDER_PATH}"
 
 # =========================
 # Wait for pods to be ready
 # =========================
-waitUntilAllPodsAreReady "$INSTALLATION_NAMESPACE"
+waitUntilAllPodsAreReady "$PREVIEW_NAMESPACE"
 echo "Installation is happy: https://${DOMAIN}/workspaces"
 
 # =====================

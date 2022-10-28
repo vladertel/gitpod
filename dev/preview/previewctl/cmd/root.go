@@ -18,6 +18,8 @@ func NewRootCmd(logger *logrus.Logger) *cobra.Command {
 	cmd := &cobra.Command{
 		Use: "previewctl",
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+			// TODO fix this on a global level as it's a bit fickle
+			// we should pass the logger via the context
 			lvl, err := logrus.ParseLevel(logLevel)
 			if err != nil {
 				return err

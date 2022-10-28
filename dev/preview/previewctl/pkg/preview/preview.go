@@ -9,9 +9,11 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"math/rand"
 	"os"
 	"os/exec"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -171,11 +173,15 @@ func (p *Preview) GetPreviewContext(ctx context.Context) (*api.Config, error) {
 
 	stopChan, readyChan, errChan := make(chan struct{}, 1), make(chan struct{}, 1), make(chan error, 1)
 
+	// pick a random port, so we avoid clashes if something else port-forwards to 2200
+	randPort := strconv.Itoa(rand.Intn(2299-2201) + 2201)
 	go func() {
 		err := k.PortForward(ctx, k8s.PortForwardOpts{
 			Name:      p.name,
 			Namespace: p.namespace,
-			Ports:     []string{"2200"},
+			Ports: []string{
+				fmt.Sprintf("%s:2200", randPort),
+			},
 			ReadyChan: readyChan,
 			StopChan:  stopChan,
 			ErrChan:   errChan,
@@ -188,7 +194,7 @@ func (p *Preview) GetPreviewContext(ctx context.Context) (*api.Config, error) {
 
 	select {
 	case <-readyChan:
-		cfgGet, err := ssh.NewK3SConfigGetter(ctx, "127.0.0.1", "2200")
+		cfgGet, err := ssh.NewK3SConfigGetter(ctx, "127.0.0.1", randPort)
 		if err != nil {
 			return nil, err
 		}

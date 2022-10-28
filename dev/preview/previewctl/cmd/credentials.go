@@ -89,6 +89,8 @@ merges them with the default config, and outputs them either to stdout or to a f
 
 	cmd.PersistentFlags().StringVar(&opts.serviceAccountPath, "gcp-service-account", "", "path to the GCP service account to use")
 	cmd.PersistentFlags().StringVar(&opts.kubeConfigSavePath, "kube-save-path", "", "path to save the generated kubeconfig to")
+	//TODO fix: since we call this command from install-context - this flag doesn't get properly passed from the parent
+	cmd.PersistentFlags().StringVar(&logLevel, "log-level", "info", "The logger's log level")
 
 	return cmd
 }

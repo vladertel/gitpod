@@ -92,19 +92,6 @@ export async function deployToPreviewEnvironment(werft: Werft, jobConfig: JobCon
     VM.copyk3sKubeconfigShell({ name: destname, timeoutMS: 1000 * 60 * 6, slice: vmSlices.KUBECONFIG });
     werft.done(vmSlices.KUBECONFIG);
 
-    // TODO: Port over?
-    // werft.log(vmSlices.WAIT_K3S, "Wait for k3s");
-    // await waitForApiserver(PREVIEW_K3S_KUBECONFIG_PATH, { slice: vmSlices.WAIT_K3S });
-    // await waitUntilAllPodsAreReady("kube-system", PREVIEW_K3S_KUBECONFIG_PATH, { slice: vmSlices.WAIT_K3S });
-    // werft.rootSpan.setAttributes({ "preview.k3s_successfully_created": true });
-    // werft.done(vmSlices.WAIT_K3S);
-
-    // TODO: Port over?
-    // werft.log(vmSlices.WAIT_CERTMANAGER, "Wait for Cert-Manager");
-    // await waitUntilAllPodsAreReady("cert-manager", PREVIEW_K3S_KUBECONFIG_PATH, { slice: vmSlices.WAIT_CERTMANAGER });
-    // werft.rootSpan.setAttributes({ "preview.certmanager_installed_successfully": true });
-    // werft.done(vmSlices.WAIT_CERTMANAGER);
-
     exec(
         `kubectl --kubeconfig ${CORE_DEV_KUBECONFIG_PATH} get secret clouddns-dns01-solver-svc-acct -n certmanager -o yaml | sed 's/namespace: certmanager/namespace: cert-manager/g' > clouddns-dns01-solver-svc-acct.yaml`,
         { slice: vmSlices.INSTALL_CERT_ISSUER },

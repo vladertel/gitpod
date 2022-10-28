@@ -28,7 +28,6 @@ IMAGE_PULL_SECRET_NAME="gcp-sa-registry-auth";
 PROXY_SECRET_NAME="proxy-config-certificates";
 
 INSTALLATION_NAMESPACE="default"
-
 PATH_TO_RENDERED_YAML="k8s.yaml"
 
 VERSION="${VERSION:-$(preview-name-from-branch)-dev}"
@@ -111,6 +110,69 @@ EOF
 
   rm -f ${IMAGE_PULL_SECRET_NAME}
 }
+
+function waitUntilAllPodsAreReady {
+  local namespace
+  namespace="$1"
+
+  echo "Waiting until all pods in namespace ${namespace} are Running/Succeeded/Completed."
+  ATTEMPTS=0
+  SUCCESSFUL="false"
+  while [ ${ATTEMPTS} -lt 200 ]
+  do
+    ATTEMPTS=$((ATTEMPTS+1))
+    pods=$(
+      kubectl \
+        --kubeconfig "${PREVIEW_K3S_KUBE_PATH}" \
+        --context "${PREVIEW_K3S_KUBE_CONTEXT}" \
+        get pods -n "${namespace}" \
+          -l 'component!=workspace' \
+          -o=jsonpath='{range .items[*]}{@.metadata.name}:{@.metadata.ownerReferences[0].kind}:{@.status.phase} {end}'
+    )
+    if [[ -z "${pods}" ]]; then
+      echo "The namespace is empty or does not exist."
+      echo "Sleeping"
+      sleep 3
+      continue
+    fi
+
+    unreadyPods=""
+    for  pod in $pods; do
+      owner=$(echo "$pod" | cut -d ":" -f 2)
+      phase=$(echo "$pod" | cut -d ":" -f 3)
+      if [[ $owner == "Job" && $phase != "Succeeded" ]]; then
+        unreadyPods="$pod $unreadyPods"
+      fi
+      if [[ $owner != "Job" && $phase != "Running" ]]; then
+        unreadyPods="$pod $unreadyPods"
+      fi
+    done
+
+    if [[ -z "${unreadyPods}" ]]; then
+      echo "All pods are Running/Succeeded/Completed!"
+      SUCCESSFUL="true"
+      break
+    fi
+
+    echo "Uneady pods: $unreadyPods"
+    echo "Sleeping 10 seconds before checking again"
+    sleep 10
+  done
+
+  if [[ "${SUCCESSFUL}" == "true" ]]; then
+    return 0
+  else
+    echo "Not all pods in namespace ${namespace} transitioned to 'Running' or 'Succeeded/Completed' during the expected time."
+    return 1
+  fi
+}
+
+# ====================================
+# Prerequisites
+# ====================================
+
+waitUntilAllPodsAreReady "kube-system"
+waitUntilAllPodsAreReady "cert-manager"
 
 # ====================================
 # Copy over resources from dev cluster
@@ -425,55 +487,8 @@ rm -f "${PATH_TO_RENDERED_YAML}"
 # =========================
 # Wait for pods to be ready
 # =========================
-echo "Waiting until all pods in namespace ${INSTALLATION_NAMESPACE} are Running/Succeeded/Completed."
-ATTEMPTS=0
-SUCCESSFUL="false"
-while [ ${ATTEMPTS} -lt 200 ]
-do
-  ATTEMPTS=$((ATTEMPTS+1))
-  pods=$(
-    kubectl \
-      --kubeconfig "${PREVIEW_K3S_KUBE_PATH}" \
-      --context "${PREVIEW_K3S_KUBE_CONTEXT}" \
-      get pods -n ${INSTALLATION_NAMESPACE} \
-        -l 'component!=workspace' \
-        -o=jsonpath='{range .items[*]}{@.metadata.name}:{@.metadata.ownerReferences[0].kind}:{@.status.phase} {end}'
-  )
-  if [[ -z "${pods}" ]]; then
-    echo "The namespace is empty or does not exist."
-    echo "Sleeping"
-    sleep 3
-    continue
-  fi
-
-  unreadyPods=""
-  for  pod in $pods; do
-    owner=$(echo "$pod" | cut -d ":" -f 2)
-    phase=$(echo "$pod" | cut -d ":" -f 3)
-    if [[ $owner == "Job" && $phase != "Succeeded" ]]; then
-      unreadyPods="$pod $unreadyPods"
-    fi
-    if [[ $owner != "Job" && $phase != "Running" ]]; then
-      unreadyPods="$pod $unreadyPods"
-    fi
-  done
-
-  if [[ -z "${unreadyPods}" ]]; then
-    echo "All pods are Running/Succeeded/Completed!"
-    SUCCESSFUL="true"
-    break
-  fi
-
-  echo "Uneady pods: $unreadyPods"
-  echo "Sleeping 3 seconds before checking again"
-  sleep 10
-done
-
-if [[ "${SUCCESSFUL}" == "true" ]]; then
-  echo "Installation is happy: https://${DOMAIN}/workspaces"
-else
-  echo "Not all pods in namespace ${INSTALLATION_NAMESPACE} transitioned to 'Running' or 'Succeeded/Completed' during the expected time."
-fi
+waitUntilAllPodsAreReady "$INSTALLATION_NAMESPACE"
+echo "Installation is happy: https://${DOMAIN}/workspaces"
 
 # =====================
 # Add agent smith token

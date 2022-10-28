@@ -63,7 +63,7 @@ merges them with the default config, and outputs them either to stdout or to a f
 }
 
 func (o *getCredentialsOpts) getCredentials(ctx context.Context) (*api.Config, error) {
-	// TODO fix this as it's a bit ugly
+	// TODO: fix this as it's a bit ugly
 	var shouldRun bool
 	for _, kc := range []string{coreDevDesiredContextName, "harvester"} {
 		if ok := hasAccess(o.logger, kc); !ok {
@@ -86,20 +86,15 @@ func (o *getCredentialsOpts) getCredentials(ctx context.Context) (*api.Config, e
 		"harvester": o.getHarvesterKubeConfig,
 	}
 
+	configs := make([]*api.Config, 0)
 	for _, kc := range []string{coreDevDesiredContextName, "harvester"} {
-		if ok := hasAccess(o.logger, kc); !ok {
-			config, err := o.getCredentialsMap[kc](ctx)
-			if err != nil {
-				return nil, err
-			}
-
-			o.configMap[kc] = config
+		config, err := o.getCredentialsMap[kc](ctx)
+		if err != nil {
+			return nil, err
 		}
-	}
 
-	configs := make([]*api.Config, 0, len(o.configMap))
-	for _, c := range o.configMap {
-		configs = append(configs, c)
+		o.configMap[kc] = config
+		configs = append(configs, config)
 	}
 
 	return kube.MergeContextsWithDefault(configs...)

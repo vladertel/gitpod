@@ -69,11 +69,18 @@ func New(branch string, logger *logrus.Logger) (*Preview, error) {
 	}, nil
 }
 
-func (p *Preview) InstallContext(wait bool, timeout time.Duration, kubeSavePath string) error {
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+type InstallCtxOpts struct {
+	Wait              bool
+	Timeout           time.Duration
+	KubeSavePath      string
+	SSHPrivateKeyPath string
+}
+
+func (p *Preview) InstallContext(ctx context.Context, opts InstallCtxOpts) error {
+	ctx, cancel := context.WithTimeout(ctx, opts.Timeout)
 	defer cancel()
 
-	p.logger.WithFields(logrus.Fields{"timeout": timeout}).Debug("Installing context")
+	p.logger.WithFields(logrus.Fields{"timeout": opts.Timeout}).Debug("Installing context")
 
 	// we use this channel to signal when we've found an event in wait functions, so we know when we're done
 	doneCh := make(chan struct{})
@@ -83,9 +90,9 @@ func (p *Preview) InstallContext(wait bool, timeout time.Duration, kubeSavePath 
 	err := p.harvesterClient.GetVMStatus(ctx, p.name, p.namespace)
 	if err != nil && !errors.Is(err, k8s.ErrVmNotReady) {
 		return err
-	} else if errors.Is(err, k8s.ErrVmNotReady) && !wait {
+	} else if errors.Is(err, k8s.ErrVmNotReady) && !opts.Wait {
 		return err
-	} else if errors.Is(err, k8s.ErrVmNotReady) && wait {
+	} else if errors.Is(err, k8s.ErrVmNotReady) && opts.Wait {
 		err = p.harvesterClient.WaitVMReady(ctx, p.name, p.namespace, doneCh)
 		if err != nil {
 			return err
@@ -95,23 +102,23 @@ func (p *Preview) InstallContext(wait bool, timeout time.Duration, kubeSavePath 
 	err = p.harvesterClient.GetProxyVMServiceStatus(ctx, p.namespace)
 	if err != nil && !errors.Is(err, k8s.ErrSvcNotReady) {
 		return err
-	} else if errors.Is(err, k8s.ErrSvcNotReady) && !wait {
+	} else if errors.Is(err, k8s.ErrSvcNotReady) && !opts.Wait {
 		return err
-	} else if errors.Is(err, k8s.ErrSvcNotReady) && wait {
+	} else if errors.Is(err, k8s.ErrSvcNotReady) && opts.Wait {
 		err = p.harvesterClient.WaitProxySvcReady(ctx, p.namespace, doneCh)
 		if err != nil {
 			return err
 		}
 	}
 
-	if wait {
+	if opts.Wait {
 		for {
 			select {
 			case <-ctx.Done():
 				return ctx.Err()
 			case <-time.Tick(5 * time.Second):
 				p.logger.Infof("waiting for context install to succeed")
-				err = p.Install(ctx, kubeSavePath)
+				err = p.Install(ctx, opts)
 				if err == nil {
 					p.logger.Infof("Successfully installed context")
 					return nil
@@ -120,7 +127,7 @@ func (p *Preview) InstallContext(wait bool, timeout time.Duration, kubeSavePath 
 		}
 	}
 
-	return p.Install(ctx, kubeSavePath)
+	return p.Install(ctx, opts)
 }
 
 // Same compares two preview envrionments
@@ -152,8 +159,8 @@ func ensureVMICreationTime(p *Preview) {
 	}
 }
 
-func (p *Preview) Install(ctx context.Context, kubeConfigSavePath string) error {
-	cfg, err := p.GetPreviewContext(ctx)
+func (p *Preview) Install(ctx context.Context, opts InstallCtxOpts) error {
+	cfg, err := p.GetPreviewContext(ctx, opts)
 	if err != nil {
 		return err
 	}
@@ -163,10 +170,10 @@ func (p *Preview) Install(ctx context.Context, kubeConfigSavePath string) error 
 		return err
 	}
 
-	return k8s.OutputContext(kubeConfigSavePath, merged)
+	return k8s.OutputContext(opts.KubeSavePath, merged)
 }
 
-func (p *Preview) GetPreviewContext(ctx context.Context) (*api.Config, error) {
+func (p *Preview) GetPreviewContext(ctx context.Context, opts InstallCtxOpts) (*api.Config, error) {
 	stopChan, readyChan, errChan := make(chan struct{}, 1), make(chan struct{}, 1), make(chan error, 1)
 
 	// pick a random port, so we avoid clashes if something else port-forwards to 2200
@@ -190,7 +197,11 @@ func (p *Preview) GetPreviewContext(ctx context.Context) (*api.Config, error) {
 
 	select {
 	case <-readyChan:
-		cfgGet, err := ssh.NewK3SConfigGetter(ctx, "127.0.0.1", randPort)
+		cfgGet, err := ssh.NewK3SConfigGetter(ctx, ssh.K3SConfigGetterOpts{
+			Host:              "127.0.0.1",
+			Port:              randPort,
+			SSHPrivateKeyPath: opts.SSHPrivateKeyPath,
+		})
 		if err != nil {
 			return nil, err
 		}

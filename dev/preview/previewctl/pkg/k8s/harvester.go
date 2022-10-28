@@ -57,6 +57,7 @@ func (c *Config) GetHarvesterKubeConfig(ctx context.Context) (*api.Config, error
 }
 
 func (c *Config) getVMPodName(ctx context.Context, name, namespace string) (string, error) {
+	// TODO replace this with a call to SVC.Proxy and get the pod name from there
 	labelSelector := metav1.LabelSelector{
 		MatchLabels: map[string]string{
 			"harvesterhci.io/vmName": name,

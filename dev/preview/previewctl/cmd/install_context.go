@@ -19,24 +19,26 @@ import (
 	"github.com/gitpod-io/gitpod/previewctl/pkg/preview"
 )
 
-type installContextOpts struct {
+type installContextCmdOpts struct {
 	logger *logrus.Logger
 
 	watch              bool
-	kubeConfigSavePath string
 	timeout            time.Duration
+	kubeConfigSavePath string
+	sshPrivateKeyPath  string
+
+	getCredentialsOpts *getCredentialsOpts
 }
 
 func newInstallContextCmd(logger *logrus.Logger) *cobra.Command {
 	ctx := context.Background()
 
-	getCredsOpts := &getCredentialsOpts{
-		logger:    logger,
-		configMap: map[string]*api.Config{},
-	}
-
-	opts := installContextOpts{
+	opts := installContextCmdOpts{
 		logger: logger,
+		getCredentialsOpts: &getCredentialsOpts{
+			logger:    logger,
+			configMap: map[string]*api.Config{},
+		},
 	}
 
 	// Used to ensure that we only install contexts
@@ -54,7 +56,13 @@ func newInstallContextCmd(logger *logrus.Logger) *cobra.Command {
 			return nil
 		}
 
-		err = p.InstallContext(opts.watch, opts.timeout, opts.kubeConfigSavePath)
+		err = p.InstallContext(ctx, preview.InstallCtxOpts{
+			Wait:              opts.watch,
+			Timeout:           opts.timeout,
+			KubeSavePath:      opts.kubeConfigSavePath,
+			SSHPrivateKeyPath: opts.sshPrivateKeyPath,
+		})
+
 		if err == nil {
 			lastSuccessfulPreviewEnvironment = p
 		}
@@ -66,11 +74,12 @@ func newInstallContextCmd(logger *logrus.Logger) *cobra.Command {
 		Use:   "install-context",
 		Short: "Installs the kubectl context of a preview environment.",
 		PreRunE: func(cmd *cobra.Command, args []string) error {
+			// if no path is set we opt to save the contexts to the default one
 			if opts.kubeConfigSavePath == "" {
 				opts.kubeConfigSavePath = filepath.Join(homedir.HomeDir(), clientcmd.RecommendedHomeDir, clientcmd.RecommendedFileName)
 			}
 
-			configs, err := getCredsOpts.getCredentials(ctx)
+			configs, err := opts.getCredentialsOpts.getCredentials(ctx)
 			if err != nil {
 				return err
 			}
@@ -100,7 +109,9 @@ func newInstallContextCmd(logger *logrus.Logger) *cobra.Command {
 	cmd.Flags().BoolVar(&opts.watch, "watch", false, "If watch is enabled, previewctl will keep trying to install the kube-context every 15 seconds.")
 	cmd.Flags().DurationVarP(&opts.timeout, "timeout", "t", 10*time.Minute, "Timeout before considering the installation failed")
 	cmd.PersistentFlags().StringVar(&opts.kubeConfigSavePath, "kube-save-path", "", "path to save the generated kubeconfig to")
-	cmd.PersistentFlags().StringVar(&getCredsOpts.serviceAccountPath, "gcp-service-account", "", "path to the GCP service account to use")
+	cmd.PersistentFlags().StringVar(&opts.sshPrivateKeyPath, "private-key-path", "$HOME/.ssh/vm_id_rsa", "path to the private key used to authenticate with the VM")
+	cmd.PersistentFlags().StringVar(&opts.getCredentialsOpts.serviceAccountPath, "gcp-service-account", "", "path to the GCP service account to use")
+	cmd.PersistentFlags().StringVar(&opts.getCredentialsOpts.serviceAccountPath, "gcp-service-account", "", "path to the GCP service account to use")
 
 	return cmd
 }

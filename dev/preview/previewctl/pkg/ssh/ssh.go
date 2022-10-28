@@ -28,10 +28,16 @@ type K3SConfigGetter struct {
 	configPath string
 }
 
-func NewK3SConfigGetter(ctx context.Context, host, port string) (*K3SConfigGetter, error) {
+type K3SConfigGetterOpts struct {
+	Host              string
+	Port              string
+	SSHPrivateKeyPath string
+}
+
+func NewK3SConfigGetter(ctx context.Context, opts K3SConfigGetterOpts) (*K3SConfigGetter, error) {
 	var err error
 
-	key, err := os.ReadFile("/Users/vlk/temp/vm-keys/pkey")
+	key, err := os.ReadFile(opts.SSHPrivateKeyPath)
 	if err != nil {
 		return nil, err
 	}
@@ -54,7 +60,7 @@ func NewK3SConfigGetter(ctx context.Context, host, port string) (*K3SConfigGette
 		configPath: k3sConfigPath,
 	}
 
-	client, err := config.connectToHost(ctx, host, port)
+	client, err := config.connectToHost(ctx, opts.Host, opts.Port)
 	if err != nil {
 		return nil, err
 	}

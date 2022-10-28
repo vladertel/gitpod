@@ -6,7 +6,6 @@ package k8s
 
 import (
 	"context"
-	"k8s.io/client-go/tools/clientcmd/api"
 	"strings"
 
 	"github.com/cockroachdb/errors"
@@ -17,6 +16,7 @@ import (
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
+	"k8s.io/client-go/tools/clientcmd/api"
 )
 
 var (

@@ -1,105 +1,76 @@
 package ssh
 
 import (
-	"bytes"
 	"context"
-	"os"
-	"strings"
+	"fmt"
+	"io"
+	"net"
 
-	"github.com/cockroachdb/errors"
 	"golang.org/x/crypto/ssh"
-	"k8s.io/client-go/tools/clientcmd"
-	"k8s.io/client-go/tools/clientcmd/api"
 )
 
-const (
-	k3sConfigPath   = "/etc/rancher/k3s/k3s.yaml"
-	catK3sConfigCmd = "sudo cat /etc/rancher/k3s/k3s.yaml"
-)
+type sshClient interface {
+	io.Closer
 
-var (
-	ErrK3SConfigNotFound = errors.New("k3s config file not found")
-)
-
-type K3SConfigGetter struct {
-	sshClientFactory sshClientFactory
-	client           sshClient
-
-	configPath string
+	Run(ctx context.Context, cmd string, stdout io.Writer, stderr io.Writer) error
 }
 
-type K3SConfigGetterOpts struct {
-	Host              string
-	Port              string
-	SSHPrivateKeyPath string
+type sshClientFactory interface {
+	Dial(ctx context.Context, host, port string) (sshClient, error)
 }
 
-func NewK3SConfigGetter(ctx context.Context, opts K3SConfigGetterOpts) (*K3SConfigGetter, error) {
-	var err error
-
-	key, err := os.ReadFile(opts.SSHPrivateKeyPath)
-	if err != nil {
-		return nil, err
-	}
-
-	signer, err := ssh.ParsePrivateKey(key)
-	if err != nil {
-		return nil, err
-	}
-
-	config := &K3SConfigGetter{
-		sshClientFactory: &factoryImplementation{
-			sshConfig: &ssh.ClientConfig{
-				User: "ubuntu",
-				Auth: []ssh.AuthMethod{
-					ssh.PublicKeys(signer),
-				},
-				HostKeyCallback: ssh.InsecureIgnoreHostKey(),
-			},
-		},
-		configPath: k3sConfigPath,
-	}
-
-	client, err := config.connectToHost(ctx, opts.Host, opts.Port)
-	if err != nil {
-		return nil, err
-	}
-
-	config.client = client
-
-	return config, nil
+type clientImplementation struct {
+	client *ssh.Client
 }
 
-func (k *K3SConfigGetter) GetK3SContext(ctx context.Context) (*api.Config, error) {
-	stdout := new(bytes.Buffer)
-	stderr := new(bytes.Buffer)
+var _ sshClient = &clientImplementation{}
 
-	err := k.client.Run(ctx, catK3sConfigCmd, stdout, stderr)
+func (s *clientImplementation) Run(ctx context.Context, cmd string, stdout io.Writer, stderr io.Writer) error {
+	sess, err := s.client.NewSession()
 	if err != nil {
-		if strings.Contains(stderr.String(), "No such file or directory") {
-			return nil, ErrK3SConfigNotFound
+		return err
+	}
+
+	defer func(sess *ssh.Session) {
+		err := sess.Close()
+		if err != nil && err != io.EOF {
+			panic(err)
 		}
+	}(sess)
 
-		return nil, errors.Wrap(err, stderr.String())
-	}
+	sess.Stdout = stdout
+	sess.Stderr = stderr
 
-	c, err := clientcmd.NewClientConfigFromBytes(stdout.Bytes())
+	return sess.Run(cmd)
+}
+
+func (s *clientImplementation) Close() error {
+	return s.client.Close()
+}
+
+type factoryImplementation struct {
+	sshConfig *ssh.ClientConfig
+}
+
+var _ sshClientFactory = &factoryImplementation{}
+
+func (f *factoryImplementation) Dial(ctx context.Context, host, port string) (sshClient, error) {
+	addr := fmt.Sprintf("%s:%s", host, port)
+	d := net.Dialer{}
+	conn, err := d.DialContext(ctx, "tcp", addr)
 	if err != nil {
 		return nil, err
 	}
 
-	rc, err := c.RawConfig()
+	var client *ssh.Client
+	c, chans, reqs, err := ssh.NewClientConn(conn, addr, f.sshConfig)
 	if err != nil {
 		return nil, err
 	}
 
-	return &rc, nil
-}
+	client = ssh.NewClient(c, chans, reqs)
 
-func (k *K3SConfigGetter) connectToHost(ctx context.Context, host, port string) (sshClient, error) {
-	return k.sshClientFactory.Dial(ctx, host, port)
-}
-
-func (k *K3SConfigGetter) Close() error {
-	return k.client.Close()
+	return &clientImplementation{
+		client: client,
+	}, nil
 }

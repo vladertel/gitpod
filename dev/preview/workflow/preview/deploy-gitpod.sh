@@ -12,8 +12,8 @@ source "$(realpath "${SCRIPT_PATH}/../../util/preview-name-from-branch.sh")"
 
 DEV_KUBE_PATH="/home/gitpod/.kube/config"
 DEV_KUBE_CONTEXT="dev"
-HARVESTER_KUBE_PATH="/home/gitpod/.kube/config"
-HARVESTER_KUBE_CONTEXT="harvester"
+# HARVESTER_KUBE_PATH="/home/gitpod/.kube/config"
+# HARVESTER_KUBE_CONTEXT="harvester"
 
 PREVIEW_NAME="$(preview-name-from-branch)"
 PREVIEW_K3S_KUBE_PATH="${PREVIEW_K3S_KUBECONFIG_PATH:-/home/gitpod/.kube/config}"
@@ -23,6 +23,9 @@ PREVIEW_K3S_KUBE_CONTEXT="${PREVIEW_K3S_KUBE_CONTEXT:-$PREVIEW_NAME}"
 # AGENT_SMITH_TOKEN="$(tr -dc 'A-Fa-f0-9' < /dev/urandom | head -c61)"
 AGENT_SMITH_TOKEN="57B8fdFD68442a37E18B22bFD83638D451E087A047Eb4e4BF8BCc3EdF5825"
 
+CONTAINER_REGISTRY_URL="eu.gcr.io/gitpod-core-dev/build/";
+IMAGE_PULL_SECRET_NAME="gcp-sa-registry-auth";
+PROXY_SECRET_NAME="proxy-config-certificates";
 
 INSTALLATION_NAMESPACE="default"
 
@@ -44,25 +47,77 @@ function installer {
     /tmp/installer "$@"
 }
 
-function findLastHostPort {
-  name="$1"
+function copyCachedCertificate {
+  CERTS_NAMESPACE="certs"
+  SORUCE_CERT_NAME="harvester-${PREVIEW_NAME}"
+  DESTINATION_CERT_NAME="$PROXY_SECRET_NAME"
+
+  kubectl \
+    --kubeconfig ${DEV_KUBE_PATH} \
+    --context ${DEV_KUBE_CONTEXT} \
+    get secret "${SORUCE_CERT_NAME}" --namespace="${CERTS_NAMESPACE}" -o yaml \
+  | yq d - 'metadata.namespace' \
+  | yq d - 'metadata.uid' \
+  | yq d - 'metadata.resourceVersion' \
+  | yq d - 'metadata.creationTimestamp' \
+  | yq d - 'metadata.ownerReferences' \
+  | sed "s/${SORUCE_CERT_NAME}/${DESTINATION_CERT_NAME}/g" \
+  | kubectl \
+      --kubeconfig "${PREVIEW_K3S_KUBE_PATH}" \
+      --context "${PREVIEW_K3S_KUBE_CONTEXT}" \
+      apply --namespace="${INSTALLATION_NAMESPACE}" -f -
+}
+
+# Used by blobserve
+function copyImagePullSecret {
+  local exists
+  IMAGE_PULL_SECRET_NAME="gcp-sa-registry-auth"
+
+  # hasPullSecret
+  exists=$(
+    kubectl \
+      --kubeconfig "${PREVIEW_K3S_KUBE_PATH}" \
+      --context "${PREVIEW_K3S_KUBE_CONTEXT}" \
+      get secret ${IMAGE_PULL_SECRET_NAME} \
+        -namespace "${INSTALLATION_NAMESPACE}" \
+        --ignore-not-found
+  )
+
+  if [[ -z ${exists} ]]; then
+    return
+  fi
+
+  imagePullAuth=$(
+    printf "%s" "_json_key:$(kubectl --kubeconfig ${DEV_KUBE_PATH} --context ${DEV_KUBE_CONTEXT} get secret ${IMAGE_PULL_SECRET_NAME} --namespace=keys -o yaml \
+    | yq r - data['.dockerconfigjson'] \
+    | base64 -d)" | base64 -w 0
+  )
+
+  cat <<EOF > "${IMAGE_PULL_SECRET_NAME}"
+  {
+    "auths": {
+      "eu.gcr.io": { "auth": "${imagePullAuth}" },
+      "europe-docker.pkg.dev": { "auth": "${imagePullAuth}" }
+    }
+  }
+EOF
+
   kubectl \
     --kubeconfig "${PREVIEW_K3S_KUBE_PATH}" \
     --context "${PREVIEW_K3S_KUBE_CONTEXT}" \
-    get ds -n ${INSTALLATION_NAMESPACE} "${name}" -o yaml \
-  | yq r - 'spec.template.spec.containers.*.ports.*.hostPort'
+    create secret docker-registry ${IMAGE_PULL_SECRET_NAME} \
+      --namespace ${INSTALLATION_NAMESPACE} \
+      --from-file=.dockerconfigjson=./${IMAGE_PULL_SECRET_NAME}
 
-  #
-  # TODO: If the port is empty, then select one.
-  # [wsdaemonPortMeta, registryNodePortMeta] = await findFreeHostPorts(
-  #           [
-  #               { start: 10000, end: 11000 },
-  #               { start: 30000, end: 31000 },
-  #           ],
-  #           deploymentKubeconfig,
-  #           metaEnv({ slice: installerSlices.FIND_FREE_HOST_PORTS, silent: true }),
-  #       );
+  rm -f ${IMAGE_PULL_SECRET_NAME}
 }
+
+# ====================================
+# Copy over resources from dev cluster
+# ====================================
+
+copyCachedCertificate
+copyImagePullSecret
 
 # ========
 # Init
@@ -99,9 +154,6 @@ rm shortname.yaml
 #
 # configureContainerRegistry
 #
-CONTAINER_REGISTRY_URL="eu.gcr.io/gitpod-core-dev/build/";
-IMAGE_PULL_SECRET_NAME="gcp-sa-registry-auth";
-PROXY_SECRET_NAME="proxy-config-certificates";
 yq w -i "${INSTALLER_CONFIG_PATH}" certificate.name "${PROXY_SECRET_NAME}"
 yq w -i "${INSTALLER_CONFIG_PATH}" containerRegistry.inCluster "false"
 yq w -i "${INSTALLER_CONFIG_PATH}" containerRegistry.external.url "${CONTAINER_REGISTRY_URL}"
@@ -189,11 +241,11 @@ for row in $(kubectl --kubeconfig "$DEV_KUBE_PATH" --context=${DEV_KUBE_CONTEXT}
 
     kubectl create secret generic "$providerId" \
         --namespace "${INSTALLATION_NAMESPACE}" \
-        --kubeconfig "${HARVESTER_KUBE_PATH}" \
-        --context "${HARVESTER_KUBE_CONTEXT}" \
+        --kubeconfig "${PREVIEW_K3S_KUBE_PATH}" \
+        --context "${PREVIEW_K3S_KUBE_CONTEXT}" \
         --from-literal=provider="$data" \
         --dry-run=client -o yaml | \
-        kubectl --kubeconfig "${HARVESTER_KUBE_PATH}" --context "${HARVESTER_KUBE_CONTEXT}" replace --force -f -
+        kubectl --kubeconfig "${PREVIEW_K3S_KUBE_PATH}" --context "${PREVIEW_K3S_KUBE_CONTEXT}" replace --force -f -
 done
 
 #
@@ -204,7 +256,7 @@ yq w -i stripe-api-keys.secret.yaml metadata.namespace "default"
 yq d -i stripe-api-keys.secret.yaml metadata.creationTimestamp
 yq d -i stripe-api-keys.secret.yaml metadata.uid
 yq d -i stripe-api-keys.secret.yaml metadata.resourceVersion
-kubectl --kubeconfig "${HARVESTER_KUBE_PATH}" --context "${HARVESTER_KUBE_CONTEXT}" apply -f stripe-api-keys.secret.yaml
+kubectl --kubeconfig "${PREVIEW_K3S_KUBE_PATH}" --context "${PREVIEW_K3S_KUBE_CONTEXT}" apply -f stripe-api-keys.secret.yaml
 rm -f stripe-api-keys.secret.yaml
 
 #
@@ -215,7 +267,7 @@ kubectl --kubeconfig ${DEV_KUBE_PATH} --context "${DEV_KUBE_CONTEXT}" --namespac
 | yq d - metadata.uid \
 | yq d - metadata.resourceVersion \
 | yq d - metadata.creationTimestamp \
-| kubectl --kubeconfig ${HARVESTER_KUBE_PATH} --context "${HARVESTER_KUBE_CONTEXT}" apply -f -
+| kubectl --kubeconfig "${PREVIEW_K3S_KUBE_PATH}" --context "${PREVIEW_K3S_KUBE_CONTEXT}" apply -f -
 
 yq w -i "${INSTALLER_CONFIG_PATH}" sshGatewayHostKey.kind "secret"
 yq w -i "${INSTALLER_CONFIG_PATH}" sshGatewayHostKey.name "host-key"
@@ -354,13 +406,7 @@ done
 # Run post-process script
 #
 
-REGISTRY_FACADE_PORT="$(findLastHostPort 'registry-facade')"
-WS_DAEMON_PORT="$(findLastHostPort 'ws-daemon')"
-WITH_VM=true "$ROOT/.werft/jobs/build/installer/post-process.sh" \
-  "${REGISTRY_FACADE_PORT}" \
-  "${WS_DAEMON_PORT}" \
-  "${PREVIEW_NAME}" \
-  "${AGENT_SMITH_TOKEN}"
+WITH_VM=true "$ROOT/.werft/jobs/build/installer/post-process.sh" "${PREVIEW_NAME}" "${AGENT_SMITH_TOKEN}"
 
 #
 # Cleanup from post-processing
@@ -381,6 +427,7 @@ rm -f "${PATH_TO_RENDERED_YAML}"
 # =========================
 echo "Waiting until all pods in namespace ${INSTALLATION_NAMESPACE} are Running/Succeeded/Completed."
 ATTEMPTS=0
+SUCCESSFUL="false"
 while [ ${ATTEMPTS} -lt 200 ]
 do
   ATTEMPTS=$((ATTEMPTS+1))
@@ -390,7 +437,7 @@ do
       --context "${PREVIEW_K3S_KUBE_CONTEXT}" \
       get pods -n ${INSTALLATION_NAMESPACE} \
         -l 'component!=workspace' \
-        -o=jsonpath='{range .items[*]}{@.metadata.name}:{@.metadata.ownerReferences[0].kind}:{@.status.phase};{end}'
+        -o=jsonpath='{range .items[*]}{@.metadata.name}:{@.metadata.ownerReferences[0].kind}:{@.status.phase} {end}'
   )
   if [[ -z "${pods}" ]]; then
     echo "The namespace is empty or does not exist."
@@ -398,10 +445,36 @@ do
     sleep 3
     continue
   fi
-  break
+
+  unreadyPods=""
+  for  pod in $pods; do
+    owner=$(echo "$pod" | cut -d ":" -f 2)
+    phase=$(echo "$pod" | cut -d ":" -f 3)
+    if [[ $owner == "Job" && $phase != "Succeeded" ]]; then
+      unreadyPods="$pod $unreadyPods"
+    fi
+    if [[ $owner != "Job" && $phase != "Running" ]]; then
+      unreadyPods="$pod $unreadyPods"
+    fi
+  done
+
+  if [[ -z "${unreadyPods}" ]]; then
+    echo "All pods are Running/Succeeded/Completed!"
+    SUCCESSFUL="true"
+    break
+  fi
+
+  echo "Uneady pods: $unreadyPods"
+  echo "Sleeping 3 seconds before checking again"
+  sleep 10
 done
 
-echo "Installation is happy: https://${DOMAIN}/workspaces"
+if [[ "${SUCCESSFUL}" == "true" ]]; then
+  echo "Installation is happy: https://${DOMAIN}/workspaces"
+else
+  echo "Not all pods in namespace ${INSTALLATION_NAMESPACE} transitioned to 'Running' or 'Succeeded/Completed' during the expected time."
+fi
+
 # =====================
 # Add agent smith token
 # =====================

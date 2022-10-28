@@ -1,19 +1,11 @@
-import { createHash, randomBytes } from "crypto";
 import * as fs from "fs";
 import { exec, ExecOptions } from "../../util/shell";
 import { MonitoringSatelliteInstaller } from "../../observability/monitoring-satellite";
 import {
-    setKubectlContextNamespace,
-    findFreeHostPorts,
     createNamespace,
-    findLastHostPort,
-    waitUntilAllPodsAreReady,
     waitForApiserver,
 } from "../../util/kubectl";
-import {
-    installCertificate,
-    InstallCertificateParams,
-} from "../../util/certs";
+
 import { env } from "../../util/util";
 import { CORE_DEV_KUBECONFIG_PATH, PREVIEW_K3S_KUBECONFIG_PATH } from "./const";
 import { Werft } from "../../util/werft";
@@ -24,28 +16,20 @@ import { previewNameFromBranchName } from "../../util/preview";
 import { SpanStatusCode } from "@opentelemetry/api";
 
 // used by Installer
-const PROXY_SECRET_NAME = "proxy-config-certificates";
-const IMAGE_PULL_SECRET_NAME = "gcp-sa-registry-auth";
 const STACKDRIVER_SERVICEACCOUNT = JSON.parse(
     fs.readFileSync(`/mnt/secrets/monitoring-satellite-stackdriver-credentials/credentials.json`, "utf8"),
 );
 
 const phases = {
-    PREDEPLOY: "predeploy",
     DEPLOY: "deploy",
     VM: "Ensure VM Readiness",
 };
 
-// Werft slices for deploy phase via installer
 const installerSlices = {
-    FIND_FREE_HOST_PORTS: "find free ports",
     IMAGE_PULL_SECRET: "image pull secret",
-    COPY_CERTIFICATES: "Copying certificates",
     CLEAN_ENV_STATE: "clean envirionment",
-    SET_CONTEXT: "set namespace",
     INSTALL: "Generate, validate, and install Gitpod",
     DEPLOYMENT_WAITING: "monitor server deployment",
-    DNS_ADD_RECORD: "add dns record",
 };
 
 const vmSlices = {
@@ -74,12 +58,6 @@ export async function deployToPreviewEnvironment(werft: Werft, jobConfig: JobCon
     const domain = `${destname}.preview.gitpod-dev.com`;
     const monitoringDomain = `${destname}.preview.gitpod-dev.com`;
     const url = `https://${domain}`;
-    const imagePullAuth = exec(
-        `printf "%s" "_json_key:$(kubectl --kubeconfig ${CORE_DEV_KUBECONFIG_PATH} get secret ${IMAGE_PULL_SECRET_NAME} --namespace=keys -o yaml \
-        | yq r - data['.dockerconfigjson'] \
-        | base64 -d)" | base64 -w 0`,
-        { silent: true },
-    ).stdout.trim();
 
     const deploymentConfig: DeploymentConfig = {
         version,
@@ -91,7 +69,6 @@ export async function deployToPreviewEnvironment(werft: Werft, jobConfig: JobCon
         analytics,
         cleanSlateDeployment,
         installEELicense,
-        imagePullAuth,
         withObservability,
     };
 
@@ -115,16 +92,18 @@ export async function deployToPreviewEnvironment(werft: Werft, jobConfig: JobCon
     VM.copyk3sKubeconfigShell({ name: destname, timeoutMS: 1000 * 60 * 6, slice: vmSlices.KUBECONFIG });
     werft.done(vmSlices.KUBECONFIG);
 
-    werft.log(vmSlices.WAIT_K3S, "Wait for k3s");
-    await waitForApiserver(PREVIEW_K3S_KUBECONFIG_PATH, { slice: vmSlices.WAIT_K3S });
-    await waitUntilAllPodsAreReady("kube-system", PREVIEW_K3S_KUBECONFIG_PATH, { slice: vmSlices.WAIT_K3S });
-    werft.rootSpan.setAttributes({ "preview.k3s_successfully_created": true });
-    werft.done(vmSlices.WAIT_K3S);
+    // TODO: Port over?
+    // werft.log(vmSlices.WAIT_K3S, "Wait for k3s");
+    // await waitForApiserver(PREVIEW_K3S_KUBECONFIG_PATH, { slice: vmSlices.WAIT_K3S });
+    // await waitUntilAllPodsAreReady("kube-system", PREVIEW_K3S_KUBECONFIG_PATH, { slice: vmSlices.WAIT_K3S });
+    // werft.rootSpan.setAttributes({ "preview.k3s_successfully_created": true });
+    // werft.done(vmSlices.WAIT_K3S);
 
-    werft.log(vmSlices.WAIT_CERTMANAGER, "Wait for Cert-Manager");
-    await waitUntilAllPodsAreReady("cert-manager", PREVIEW_K3S_KUBECONFIG_PATH, { slice: vmSlices.WAIT_CERTMANAGER });
-    werft.rootSpan.setAttributes({ "preview.certmanager_installed_successfully": true });
-    werft.done(vmSlices.WAIT_CERTMANAGER);
+    // TODO: Port over?
+    // werft.log(vmSlices.WAIT_CERTMANAGER, "Wait for Cert-Manager");
+    // await waitUntilAllPodsAreReady("cert-manager", PREVIEW_K3S_KUBECONFIG_PATH, { slice: vmSlices.WAIT_CERTMANAGER });
+    // werft.rootSpan.setAttributes({ "preview.certmanager_installed_successfully": true });
+    // werft.done(vmSlices.WAIT_CERTMANAGER);
 
     exec(
         `kubectl --kubeconfig ${CORE_DEV_KUBECONFIG_PATH} get secret clouddns-dns01-solver-svc-acct -n certmanager -o yaml | sed 's/namespace: certmanager/namespace: cert-manager/g' > clouddns-dns01-solver-svc-acct.yaml`,
@@ -150,21 +129,6 @@ export async function deployToPreviewEnvironment(werft: Werft, jobConfig: JobCon
     });
     werft.rootSpan.setAttributes({ "preview.fluentbit_installed_successfully": true });
     werft.done(vmSlices.EXTERNAL_LOGGING);
-
-    try {
-        werft.log(vmSlices.COPY_CERT_MANAGER_RESOURCES, "Copy over CertManager resources from core-dev");
-        await installMetaCertificates(
-            werft,
-            jobConfig.repository.branch,
-            "default",
-            PREVIEW_K3S_KUBECONFIG_PATH,
-            vmSlices.COPY_CERT_MANAGER_RESOURCES,
-        );
-        werft.rootSpan.setAttributes({ "preview.certificates_installed_successfully": true });
-        werft.done(vmSlices.COPY_CERT_MANAGER_RESOURCES);
-    } catch (err) {
-        werft.fail(vmSlices.COPY_CERT_MANAGER_RESOURCES, err);
-    }
 
     // Deploying monitoring satellite to VM-based preview environments is currently best-effort.
     // That means we currently don't wait for the promise here, and should the installation fail
@@ -216,12 +180,11 @@ async function deployToDevWithInstaller(
     deploymentConfig: DeploymentConfig,
     workspaceFeatureFlags: string[]
 ) {
-    // to test this function, change files in your workspace, sideload (-s) changed files into werft or set annotations (-a) like so:
-    // werft run github -f -j ./.werft/build.yaml -s ./.werft/build.ts -s ./.werft/jobs/build/installer/post-process.sh -a with-clean-slate-deployment=true
     const { version, namespace } = deploymentConfig;
     const deploymentKubeconfig = PREVIEW_K3S_KUBECONFIG_PATH;
 
     // clean environment state
+    // TODO: I think we can rid of this - we're using the default namespace now
     try {
         werft.log(installerSlices.CLEAN_ENV_STATE, "Clean the preview environment slate...");
         createNamespace(namespace, deploymentKubeconfig, metaEnv({ slice: installerSlices.CLEAN_ENV_STATE }));
@@ -229,33 +192,6 @@ async function deployToDevWithInstaller(
     } catch (err) {
         werft.fail(installerSlices.CLEAN_ENV_STATE, err);
     }
-
-    // add the image pull secret to the namespcae if it doesn't exist
-    const hasPullSecret =
-        exec(`kubectl --kubeconfig ${deploymentKubeconfig} get secret ${IMAGE_PULL_SECRET_NAME} -n ${namespace}`, {
-            slice: installerSlices.IMAGE_PULL_SECRET,
-            dontCheckRc: true,
-            silent: true,
-        }).code === 0;
-    if (!hasPullSecret) {
-        try {
-            werft.log(installerSlices.IMAGE_PULL_SECRET, "Adding the image pull secret to the namespace");
-            const dockerConfig = {
-                auths: {
-                    "eu.gcr.io": { auth: deploymentConfig.imagePullAuth },
-                    "europe-docker.pkg.dev": { auth: deploymentConfig.imagePullAuth },
-                },
-            };
-            fs.writeFileSync(`./${IMAGE_PULL_SECRET_NAME}`, JSON.stringify(dockerConfig));
-            exec(
-                `kubectl --kubeconfig ${deploymentKubeconfig} create secret docker-registry ${IMAGE_PULL_SECRET_NAME} -n ${namespace} --from-file=.dockerconfigjson=./${IMAGE_PULL_SECRET_NAME}`,
-                { slice: installerSlices.IMAGE_PULL_SECRET },
-            );
-        } catch (err) {
-            werft.fail(installerSlices.IMAGE_PULL_SECRET, err);
-        }
-    }
-    werft.done(installerSlices.IMAGE_PULL_SECRET);
 
     let analytics: Analytics | undefined;
     if ((deploymentConfig.analytics || "").startsWith("segment|")) {
@@ -270,10 +206,8 @@ async function deployToDevWithInstaller(
         installerConfigPath: "/tmp/config.yaml",
         kubeconfigPath: deploymentKubeconfig,
         version: version,
-        proxySecretName: PROXY_SECRET_NAME,
         domain: deploymentConfig.domain,
         previewName: deploymentConfig.destname,
-        imagePullSecretName: IMAGE_PULL_SECRET_NAME,
         deploymentNamespace: namespace,
         analytics: analytics,
         withEELicense: deploymentConfig.installEELicense,
@@ -306,24 +240,7 @@ interface DeploymentConfig {
     analytics?: string;
     cleanSlateDeployment: boolean;
     installEELicense: boolean;
-    imagePullAuth: string;
     withObservability: boolean;
-}
-
-async function installMetaCertificates(
-    werft: Werft,
-    branch: string,
-    destNamespace: string,
-    destinationKubeconfig: string,
-    slice: string,
-) {
-    const metaInstallCertParams = new InstallCertificateParams();
-    metaInstallCertParams.certName = `harvester-${previewNameFromBranchName(branch)}`;
-    metaInstallCertParams.certNamespace = "certs";
-    metaInstallCertParams.certSecretName = PROXY_SECRET_NAME;
-    metaInstallCertParams.destinationNamespace = destNamespace;
-    metaInstallCertParams.destinationKubeconfig = destinationKubeconfig;
-    await installCertificate(werft, metaInstallCertParams, { ...metaEnv(), slice: slice });
 }
 
 function metaEnv(_parent?: ExecOptions): ExecOptions {

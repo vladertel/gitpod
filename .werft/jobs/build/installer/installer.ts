@@ -17,10 +17,8 @@ export type InstallerOptions = {
     installerConfigPath: string;
     kubeconfigPath: string;
     version: string;
-    proxySecretName: string;
     domain: string;
     previewName: string;
-    imagePullSecretName: string;
     deploymentNamespace: string;
     analytics?: Analytics;
     withEELicense: boolean;

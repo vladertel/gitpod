@@ -31,9 +31,8 @@ export class Installer {
         const environment = {
             VERSION: this.options.version,
             DEV_KUBE_PATH: CORE_DEV_KUBECONFIG_PATH,
-            DEV_KUBE_CONTEXT: "TODO",
+            DEV_KUBE_CONTEXT: "gke_gitpod-core-dev_europe-west1-b_core-dev",
             PREVIEW_K3S_KUBE_PATH: PREVIEW_K3S_KUBECONFIG_PATH,
-            PREVIEW_K3S_KUBE_CONTEXT: "TODO",
             GITPOD_ANALYTICS_SEGMENT_TOKEN: this.options.analytics?.token || "",
             GITPOD_WORKSPACE_FEATURE_FLAGS: this.options.workspaceFeatureFlags.join(" "),
             GITPOD_WITH_EE_LICENSE: this.options.withEELicense,

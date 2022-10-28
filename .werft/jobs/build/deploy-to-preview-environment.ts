@@ -2,7 +2,7 @@ import * as fs from "fs";
 import { exec } from "../../util/shell";
 import { MonitoringSatelliteInstaller } from "../../observability/monitoring-satellite";
 
-import { CORE_DEV_KUBECONFIG_PATH, PREVIEW_K3S_KUBECONFIG_PATH } from "./const";
+import { PREVIEW_K3S_KUBECONFIG_PATH } from "./const";
 import { Werft } from "../../util/werft";
 import { JobConfig } from "./job-config";
 import * as VM from "../../vm/vm";
@@ -26,7 +26,6 @@ const installerSlices = {
 
 const vmSlices = {
     VM_READINESS: "Waiting for VM readiness",
-    INSTALL_CERT_ISSUER: "Install Certificate Issuer",
     KUBECONFIG: "Getting kubeconfig",
     EXTERNAL_LOGGING: "Install credentials to send logs from fluent-bit to GCP",
 };
@@ -93,21 +92,6 @@ export async function deployToPreviewEnvironment(werft: Werft, jobConfig: JobCon
     werft.log(vmSlices.KUBECONFIG, "Copying k3s kubeconfig");
     VM.copyk3sKubeconfigShell({ name: destname, timeoutMS: 1000 * 60 * 6, slice: vmSlices.KUBECONFIG });
     werft.done(vmSlices.KUBECONFIG);
-
-    exec(
-        `kubectl --kubeconfig ${CORE_DEV_KUBECONFIG_PATH} get secret clouddns-dns01-solver-svc-acct -n certmanager -o yaml | sed 's/namespace: certmanager/namespace: cert-manager/g' > clouddns-dns01-solver-svc-acct.yaml`,
-        { slice: vmSlices.INSTALL_CERT_ISSUER },
-    );
-    exec(
-        `kubectl --kubeconfig ${CORE_DEV_KUBECONFIG_PATH} get clusterissuer letsencrypt-issuer-gitpod-core-dev -o yaml | sed 's/letsencrypt-issuer-gitpod-core-dev/letsencrypt-issuer/g' > letsencrypt-issuer.yaml`,
-        { slice: vmSlices.INSTALL_CERT_ISSUER },
-    );
-    exec(
-        `kubectl --kubeconfig ${PREVIEW_K3S_KUBECONFIG_PATH} apply -f clouddns-dns01-solver-svc-acct.yaml -f letsencrypt-issuer.yaml`,
-        { slice: vmSlices.INSTALL_CERT_ISSUER, dontCheckRc: true },
-    );
-    werft.rootSpan.setAttributes({ "preview.issuer_installed_successfully": true });
-    werft.done(vmSlices.INSTALL_CERT_ISSUER);
 
     VM.installRookCeph({ kubeconfig: PREVIEW_K3S_KUBECONFIG_PATH });
     werft.rootSpan.setAttributes({ "preview.rook_installed_successfully": true });

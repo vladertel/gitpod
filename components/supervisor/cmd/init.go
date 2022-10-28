@@ -59,6 +59,8 @@ var initCmd = &cobra.Command{
 			defer close(supervisorDone)
 
 			err := runCommand.Wait()
+			// TODO: Check for error here?
+			log.WithError(err).Error("Run command err output")
 			if err != nil && !(strings.Contains(err.Error(), "signal: interrupt") || strings.Contains(err.Error(), "no child processes")) {
 				log.WithError(err).Error("supervisor run error")
 				return

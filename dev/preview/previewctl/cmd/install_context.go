@@ -5,11 +5,17 @@
 package cmd
 
 import (
+	"context"
+	"path/filepath"
 	"time"
 
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
+	"k8s.io/client-go/tools/clientcmd"
+	"k8s.io/client-go/tools/clientcmd/api"
+	"k8s.io/client-go/util/homedir"
 
+	kube "github.com/gitpod-io/gitpod/previewctl/pkg/k8s"
 	"github.com/gitpod-io/gitpod/previewctl/pkg/preview"
 )
 
@@ -22,6 +28,13 @@ type installContextOpts struct {
 }
 
 func newInstallContextCmd(logger *logrus.Logger) *cobra.Command {
+	ctx := context.Background()
+
+	getCredsOpts := &getCredentialsOpts{
+		logger:    logger,
+		configMap: map[string]*api.Config{},
+	}
+
 	opts := installContextOpts{
 		logger: logger,
 	}
@@ -53,14 +66,16 @@ func newInstallContextCmd(logger *logrus.Logger) *cobra.Command {
 		Use:   "install-context",
 		Short: "Installs the kubectl context of a preview environment.",
 		PreRunE: func(cmd *cobra.Command, args []string) error {
-			// TODO fix: this is a bit of a hack to call the get-credentials command before install-context
-			// ideally we should get the (dev,harvester) contexts and merge with the k3s context at the end, and not call the command directly
-			// we only run this if we specify a path to save the context to, as otherwise it would get output twice
-			if opts.kubeConfigSavePath != "" {
-				return newGetCredentialsCommand(logger).Execute()
+			if opts.kubeConfigSavePath == "" {
+				opts.kubeConfigSavePath = filepath.Join(homedir.HomeDir(), clientcmd.RecommendedHomeDir, clientcmd.RecommendedFileName)
 			}
 
-			return nil
+			configs, err := getCredsOpts.getCredentials(ctx)
+			if err != nil {
+				return err
+			}
+
+			return kube.OutputContext(opts.kubeConfigSavePath, configs)
 		},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if opts.watch {
@@ -85,6 +100,7 @@ func newInstallContextCmd(logger *logrus.Logger) *cobra.Command {
 	cmd.Flags().BoolVar(&opts.watch, "watch", false, "If watch is enabled, previewctl will keep trying to install the kube-context every 15 seconds.")
 	cmd.Flags().DurationVarP(&opts.timeout, "timeout", "t", 10*time.Minute, "Timeout before considering the installation failed")
 	cmd.PersistentFlags().StringVar(&opts.kubeConfigSavePath, "kube-save-path", "", "path to save the generated kubeconfig to")
+	cmd.PersistentFlags().StringVar(&getCredsOpts.serviceAccountPath, "gcp-service-account", "", "path to the GCP service account to use")
 
 	return cmd
 }

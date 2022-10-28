@@ -35,8 +35,6 @@ type getCredentialsOpts struct {
 }
 
 func newGetCredentialsCommand(logger *logrus.Logger) *cobra.Command {
-	var err error
-	var client *gcloud.Config
 	ctx := context.Background()
 	opts := &getCredentialsOpts{
 		logger:    logger,
@@ -47,43 +45,13 @@ func newGetCredentialsCommand(logger *logrus.Logger) *cobra.Command {
 		Use: "get-credentials",
 		Long: `previewctl get-credentials retrieves the kubernetes configs for core-dev and harvester clusters,
 merges them with the default config, and outputs them either to stdout or to a file.`,
-		PreRunE: func(cmd *cobra.Command, args []string) error {
-			client, err = gcloud.New(ctx, opts.serviceAccountPath)
-			if err != nil {
-				return err
-			}
-
-			opts.gcpClient = client
-			opts.getCredentialsMap = map[string]func(ctx context.Context) (*api.Config, error){
-				"dev":       opts.getCoreDevKubeConfig,
-				"harvester": opts.getHarvesterKubeConfig,
-			}
-
-			return nil
-		},
 		RunE: func(cmd *cobra.Command, args []string) error {
-			for _, kc := range []string{coreDevDesiredContextName, "harvester"} {
-				if ok := hasAccess(logger, kc); !ok {
-					config, err := opts.getCredentialsMap[kc](ctx)
-					if err != nil {
-						return err
-					}
-
-					opts.configMap[kc] = config
-				}
-			}
-
-			configs := make([]*api.Config, 0, len(opts.configMap))
-			for _, c := range opts.configMap {
-				configs = append(configs, c)
-			}
-
-			finalConfig, err := kube.MergeContextsWithDefault(configs...)
+			configs, err := opts.getCredentials(ctx)
 			if err != nil {
 				return err
 			}
 
-			return kube.OutputContext(opts.kubeConfigSavePath, finalConfig)
+			return kube.OutputContext(opts.kubeConfigSavePath, configs)
 		},
 	}
 
@@ -93,6 +61,37 @@ merges them with the default config, and outputs them either to stdout or to a f
 	cmd.PersistentFlags().StringVar(&logLevel, "log-level", "info", "The logger's log level")
 
 	return cmd
+}
+
+func (o *getCredentialsOpts) getCredentials(ctx context.Context) (*api.Config, error) {
+	client, err := gcloud.New(ctx, o.serviceAccountPath)
+	if err != nil {
+		return nil, err
+	}
+
+	o.gcpClient = client
+	o.getCredentialsMap = map[string]func(ctx context.Context) (*api.Config, error){
+		"dev":       o.getCoreDevKubeConfig,
+		"harvester": o.getHarvesterKubeConfig,
+	}
+
+	for _, kc := range []string{coreDevDesiredContextName, "harvester"} {
+		if ok := hasAccess(o.logger, kc); !ok {
+			config, err := o.getCredentialsMap[kc](ctx)
+			if err != nil {
+				return nil, err
+			}
+
+			o.configMap[kc] = config
+		}
+	}
+
+	configs := make([]*api.Config, 0, len(o.configMap))
+	for _, c := range o.configMap {
+		configs = append(configs, c)
+	}
+
+	return kube.MergeContextsWithDefault(configs...)
 }
 
 func hasAccess(logger *logrus.Logger, contextName string) bool {

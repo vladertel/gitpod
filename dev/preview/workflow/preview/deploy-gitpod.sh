@@ -31,7 +31,7 @@ GITPOD_WORKSPACE_FEATURE_FLAGS="${GITPOD_WORKSPACE_FEATURE_FLAGS:-}"
 VERSION="${VERSION:-$(preview-name-from-branch)-dev}"
 INSTALLER_BINARY_PATH="$(mktemp "/tmp/XXXXXX.installer")}"
 INSTALLER_CONFIG_PATH="${INSTALLER_CONFIG_PATH:-$(mktemp "/tmp/XXXXXX.gitpod.config.yaml")}"
-INSTALLER_RENDER_PATH="$(mktemp "/tmp/XXXXXX.gitpod.yaml")}"
+INSTALLER_RENDER_PATH="k8s.yaml" # k8s.yaml is hardcoded in post-prcess.sh - we can fix that later.
 
 function installer {
   if [[ ! -f ${INSTALLER_BINARY_PATH} ]]; then

@@ -88,14 +88,16 @@ func newInstallContextCmd(logger *logrus.Logger) *cobra.Command {
 				return err
 			}
 
-			if _, err = os.Stat(opts.sshPrivateKeyPath); errors.Is(err, fs.ErrNotExist) {
-				err = preview.InstallVMSSHKeys()
-				if err != nil {
-					return err
-				}
+			err = kube.OutputContext(opts.kubeConfigSavePath, configs)
+			if err != nil {
+				return err
 			}
 
-			return kube.OutputContext(opts.kubeConfigSavePath, configs)
+			if _, err = os.Stat(opts.sshPrivateKeyPath); errors.Is(err, fs.ErrNotExist) {
+				return preview.InstallVMSSHKeys()
+			}
+
+			return nil
 		},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if opts.watch {

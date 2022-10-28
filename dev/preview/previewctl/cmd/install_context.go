@@ -13,11 +13,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var (
-	watch   bool
-	timeout time.Duration
-)
-
 type installContextOpts struct {
 	logger *logrus.Logger
 
@@ -26,7 +21,7 @@ type installContextOpts struct {
 	timeout            time.Duration
 }
 
-func installContextCmd(logger *logrus.Logger) *cobra.Command {
+func newInstallContextCmd(logger *logrus.Logger) *cobra.Command {
 	ctx := context.Background()
 	opts := installContextOpts{
 		logger: logger,
@@ -35,10 +30,6 @@ func installContextCmd(logger *logrus.Logger) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "install-context",
 		Short: "Installs the kubectl context of a preview environment.",
-		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
-
-			return nil
-		},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			p, err := preview.New(branch, logger)
 			if err != nil {
@@ -105,7 +96,7 @@ func installContextCmd(logger *logrus.Logger) *cobra.Command {
 	return cmd
 }
 
-//func installContextCmd(logger *logrus.Logger) *cobra.Command {
+//func newInstallContextCmd(logger *logrus.Logger) *cobra.Command {
 //
 //	// Used to ensure that we only install contexts
 //	var lastSuccessfulPreviewEnvironment *preview.Preview = nil

@@ -78,36 +78,44 @@ func (c *Config) getVMPodName(ctx context.Context, name, namespace string) (stri
 	return pods.Items[0].Name, nil
 }
 
-func (c *Config) PortForward(ctx context.Context, name, namespace string, ports []string, stopChan, readyChan chan struct{}) error {
+type PortForwardOpts struct {
+	Name                string
+	Namespace           string
+	Ports               []string
+	ReadyChan, StopChan chan struct{}
+	ErrChan             chan error
+}
+
+func (c *Config) PortForward(ctx context.Context, opts PortForwardOpts) error {
 	roundTripper, upgrader, err := spdy.RoundTripperFor(c.config)
 	if err != nil {
 		panic(err)
 	}
 
-	podName, err := c.getVMPodName(ctx, name, namespace)
+	podName, err := c.getVMPodName(ctx, opts.Name, opts.Namespace)
 	if err != nil {
 		return err
 	}
 
-	path := fmt.Sprintf("/api/v1/namespaces/%s/pods/%s/portforward", namespace, podName)
+	path := fmt.Sprintf("/api/v1/namespaces/%s/pods/%s/portforward", opts.Namespace, podName)
 	hostIP := strings.TrimLeft(c.config.Host, "https://")
 	serverURL := url.URL{Scheme: "https", Path: path, Host: hostIP}
 
 	dialer := spdy.NewDialer(upgrader, &http.Client{Transport: roundTripper}, http.MethodPost, &serverURL)
 
 	out, errOut := new(bytes.Buffer), new(bytes.Buffer)
-	forwarder, err := portforward.New(dialer, ports, stopChan, readyChan, out, errOut)
+	forwarder, err := portforward.New(dialer, opts.Ports, opts.StopChan, opts.ReadyChan, out, errOut)
 	if err != nil {
-		panic(err)
+		return err
 	}
 
 	go func() {
-		for range readyChan { // Kubernetes will close this channel when it has something to tell us.
+		for range opts.StopChan { // Kubernetes will close this channel when it has something to tell us.
 		}
 		if len(errOut.String()) != 0 {
-			panic(errOut.String())
+			opts.ErrChan <- errors.New(errOut.String())
 		} else if len(out.String()) != 0 {
-			fmt.Println(out.String())
+			c.logger.Debug(out.String())
 		}
 	}()
 

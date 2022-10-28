@@ -157,7 +157,14 @@ func (p *Preview) Install(ctx context.Context) error {
 	stopChan, readyChan, errChan := make(chan struct{}, 1), make(chan struct{}, 1), make(chan error, 1)
 
 	go func() {
-		err := k.PortForward(context.Background(), p.name, fmt.Sprintf("preview-%s", p.name), []string{"2200"}, stopChan, readyChan)
+		err := k.PortForward(ctx, k8s.PortForwardOpts{
+			Name:      p.name,
+			Namespace: p.namespace,
+			Ports:     []string{"2200"},
+			ReadyChan: readyChan,
+			StopChan:  stopChan,
+			ErrChan:   errChan,
+		})
 		if err != nil {
 			errChan <- err
 			return
@@ -184,16 +191,18 @@ func (p *Preview) Install(ctx context.Context) error {
 		k3sConfig.Clusters[p.name].Server = fmt.Sprintf("https://%s.kube.gitpod-dev.com:6443", p.name)
 
 		c, _ := clientcmd.Write(*k3sConfig)
-		fmt.Println(string(c))
+
+		p.logger.Debugln(string(c))
 
 		return nil
 	case <-errChan:
 		return err
 	case <-time.After(time.Second * 2):
 		return errors.New("timed out waiting for port forward")
+	case <-ctx.Done():
+		p.logger.Debug("context cancelled")
+		return ctx.Err()
 	}
-
-	select {}
 }
 
 func installContext(branch string) error {

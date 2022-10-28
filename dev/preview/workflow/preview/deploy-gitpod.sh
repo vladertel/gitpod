@@ -77,7 +77,7 @@ function copyImagePullSecret {
       --kubeconfig "${PREVIEW_K3S_KUBE_PATH}" \
       --context "${PREVIEW_K3S_KUBE_CONTEXT}" \
       get secret ${GITPOD_IMAGE_PULL_SECRET_NAME} \
-        -namespace "${PREVIEW_NAMESPACE}" \
+        --namespace "${PREVIEW_NAMESPACE}" \
         --ignore-not-found
   )"
 

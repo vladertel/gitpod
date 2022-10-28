@@ -68,6 +68,7 @@ func (o *getCredentialsOpts) getCredentials(ctx context.Context) (*api.Config, e
 	for _, kc := range []string{coreDevDesiredContextName, "harvester"} {
 		if ok := hasAccess(o.logger, kc); !ok {
 			shouldRun = true
+			break
 		}
 	}
 
@@ -114,6 +115,13 @@ func hasAccess(logger *logrus.Logger, contextName string) bool {
 }
 
 func (o *getCredentialsOpts) getCoreDevKubeConfig(ctx context.Context) (*api.Config, error) {
+	if _, ok := o.configMap[coreDevDesiredContextName]; !ok {
+		config, err := kube.GetClientConfigFromContext(coreDevDesiredContextName)
+		if err == nil {
+			return config, err
+		}
+	}
+ 
 	coreDevConfig, err := o.gcpClient.GenerateConfig(ctx, coreDevClusterName, coreDevProjectID, coreDevClusterZone, coreDevDesiredContextName)
 	if err != nil {
 		return nil, err
@@ -124,15 +132,12 @@ func (o *getCredentialsOpts) getCoreDevKubeConfig(ctx context.Context) (*api.Con
 
 func (o *getCredentialsOpts) getHarvesterKubeConfig(ctx context.Context) (*api.Config, error) {
 	if _, ok := o.configMap[coreDevDesiredContextName]; !ok {
-		configLoadingRules := clientcmd.NewDefaultClientConfigLoadingRules()
-		configOverrides := &clientcmd.ConfigOverrides{CurrentContext: coreDevDesiredContextName}
-
-		config, err := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(configLoadingRules, configOverrides).RawConfig()
+		config, err := o.getCoreDevKubeConfig(ctx)
 		if err != nil {
 			return nil, err
 		}
 
-		o.configMap[coreDevDesiredContextName] = &config
+		o.configMap[coreDevDesiredContextName] = config
 	}
 
 	coreDevClientConfig, err := clientcmd.NewNonInteractiveClientConfig(*o.configMap[coreDevDesiredContextName], coreDevDesiredContextName, nil, nil).ClientConfig()

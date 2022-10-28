@@ -6,6 +6,7 @@ package k8s
 
 import (
 	"context"
+	"k8s.io/client-go/tools/clientcmd/api"
 	"strings"
 
 	"github.com/cockroachdb/errors"
@@ -46,7 +47,7 @@ func NewWithConfig(logger *logrus.Logger, config *rest.Config) (*Config, error) 
 }
 
 func NewFromDefaultConfigWithContext(logger *logrus.Logger, contextName string) (*Config, error) {
-	kconf, err := getKubernetesConfig(contextName)
+	kconf, err := GetKubernetesConfigFromContext(contextName)
 	if err != nil {
 		return nil, errors.Wrapf(err, "couldn't get [%s] kube context", contextName)
 	}
@@ -62,7 +63,22 @@ func NewFromDefaultConfigWithContext(logger *logrus.Logger, contextName string) 
 	}, nil
 }
 
-func getKubernetesConfig(context string) (*rest.Config, error) {
+func GetClientConfigFromContext(context string) (*api.Config, error) {
+	configLoadingRules := clientcmd.NewDefaultClientConfigLoadingRules()
+	configOverrides := &clientcmd.ConfigOverrides{CurrentContext: context}
+
+	config, err := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(configLoadingRules, configOverrides).RawConfig()
+	if err != nil {
+		if strings.Contains(err.Error(), "does not exist") {
+			return nil, errors.Mark(err, ErrContextNotExists)
+		}
+		return nil, err
+	}
+
+	return &config, err
+}
+
+func GetKubernetesConfigFromContext(context string) (*rest.Config, error) {
 	configLoadingRules := clientcmd.NewDefaultClientConfigLoadingRules()
 	configOverrides := &clientcmd.ConfigOverrides{CurrentContext: context}
 

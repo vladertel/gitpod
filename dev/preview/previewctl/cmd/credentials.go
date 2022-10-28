@@ -6,6 +6,7 @@ package cmd
 
 import (
 	"context"
+	"fmt"
 	"github.com/cockroachdb/errors"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
@@ -138,10 +139,12 @@ func (o *getCredentialsOpts) getHarvesterKubeConfig(ctx context.Context) (*api.C
 		o.configMap[coreDevDesiredContextName] = config
 	}
 
+	fmt.Println("harvest")
 	config, err := kube.GetClientConfigFromContext(harvesterContextName)
 	if err == nil {
 		return config, nil
 	}
+	fmt.Println("harvestEER")
 
 	coreDevClientConfig, err := clientcmd.NewNonInteractiveClientConfig(*o.configMap[coreDevDesiredContextName], coreDevDesiredContextName, nil, nil).ClientConfig()
 	if err != nil {

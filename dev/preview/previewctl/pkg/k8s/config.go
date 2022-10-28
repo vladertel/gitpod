@@ -69,10 +69,11 @@ func GetClientConfigFromContext(context string) (*api.Config, error) {
 
 	config, err := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(configLoadingRules, configOverrides).RawConfig()
 	if err != nil {
-		if strings.Contains(err.Error(), "does not exist") {
-			return nil, errors.Mark(err, ErrContextNotExists)
-		}
 		return nil, err
+	}
+
+	if len(config.Contexts) == 0 {
+		return nil, ErrContextNotExists
 	}
 
 	return &config, err

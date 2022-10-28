@@ -6,7 +6,6 @@ package cmd
 
 import (
 	"context"
-
 	"github.com/cockroachdb/errors"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
@@ -117,7 +116,7 @@ func hasAccess(logger *logrus.Logger, contextName string) bool {
 func (o *getCredentialsOpts) getCoreDevKubeConfig(ctx context.Context) (*api.Config, error) {
 	config, err := kube.GetClientConfigFromContext(coreDevDesiredContextName)
 	if err == nil {
-		return config, err
+		return config, nil
 	}
 
 	coreDevConfig, err := o.gcpClient.GenerateConfig(ctx, coreDevClusterName, coreDevProjectID, coreDevClusterZone, coreDevDesiredContextName)
@@ -140,7 +139,7 @@ func (o *getCredentialsOpts) getHarvesterKubeConfig(ctx context.Context) (*api.C
 
 	config, err := kube.GetClientConfigFromContext("harvester")
 	if err == nil {
-		return config, err
+		return config, nil
 	}
 
 	coreDevClientConfig, err := clientcmd.NewNonInteractiveClientConfig(*o.configMap[coreDevDesiredContextName], coreDevDesiredContextName, nil, nil).ClientConfig()

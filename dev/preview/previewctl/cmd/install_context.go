@@ -49,6 +49,16 @@ func newInstallContextCmd(logger *logrus.Logger) *cobra.Command {
 	var lastSuccessfulPreviewEnvironment *preview.Preview = nil
 
 	install := func(timeout time.Duration) error {
+		name, err := preview.GetName(branch)
+		if err != nil {
+			return err
+		}
+
+		if hasAccess(logger, name) {
+			opts.logger.Debugf("Access to [%s] already configured", name)
+			return nil
+		}
+
 		p, err := preview.New(branch, logger)
 
 		if err != nil {

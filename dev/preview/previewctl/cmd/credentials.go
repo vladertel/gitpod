@@ -46,6 +46,10 @@ func newGetCredentialsCommand(logger *logrus.Logger) *cobra.Command {
 		Use: "get-credentials",
 		Long: `previewctl get-credentials retrieves the kubernetes configs for core-dev and harvester clusters,
 merges them with the default config, and outputs them either to stdout or to a file.`,
+		PreRunE: func(cmd *cobra.Command, args []string) error {
+
+			return nil
+		},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			configs, err := opts.getCredentials(ctx)
 			if err != nil {
@@ -73,6 +77,8 @@ func (o *getCredentialsOpts) getCredentials(ctx context.Context) (*api.Config, e
 	}
 
 	if !shouldRun {
+		o.logger.Debug("Access to [dev, harvester] already configured.")
+		// we return the kubeconfig as we use this elsewhere as well
 		return kube.MergeContextsWithDefault()
 	}
 

@@ -6,7 +6,6 @@ package cmd
 
 import (
 	"context"
-	"fmt"
 	"github.com/cockroachdb/errors"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
@@ -84,15 +83,19 @@ func (o *getCredentialsOpts) getCredentials(ctx context.Context) (*api.Config, e
 
 	o.gcpClient = client
 	o.getCredentialsMap = map[string]func(ctx context.Context) (*api.Config, error){
-		"dev":       o.getCoreDevKubeConfig,
-		"harvester": o.getHarvesterKubeConfig,
+		coreDevDesiredContextName: o.getCoreDevKubeConfig,
+		harvesterContextName:      o.getHarvesterKubeConfig,
 	}
 
 	configs := make([]*api.Config, 0)
-	for _, kc := range []string{coreDevDesiredContextName, harvesterContextName} {
-		config, err := o.getCredentialsMap[kc](ctx)
+	for kc := range o.getCredentialsMap {
+		var config *api.Config
+		config, err := kube.GetClientConfigFromContext(kc)
 		if err != nil {
-			return nil, err
+			config, err = o.getCredentialsMap[kc](ctx)
+			if err != nil {
+				return nil, err
+			}
 		}
 
 		o.configMap[kc] = config
@@ -116,11 +119,6 @@ func hasAccess(logger *logrus.Logger, contextName string) bool {
 }
 
 func (o *getCredentialsOpts) getCoreDevKubeConfig(ctx context.Context) (*api.Config, error) {
-	config, err := kube.GetClientConfigFromContext(coreDevDesiredContextName)
-	if err == nil {
-		return config, nil
-	}
-
 	coreDevConfig, err := o.gcpClient.GenerateConfig(ctx, coreDevClusterName, coreDevProjectID, coreDevClusterZone, coreDevDesiredContextName)
 	if err != nil {
 		return nil, err
@@ -138,13 +136,6 @@ func (o *getCredentialsOpts) getHarvesterKubeConfig(ctx context.Context) (*api.C
 
 		o.configMap[coreDevDesiredContextName] = config
 	}
-
-	fmt.Println("harvest")
-	config, err := kube.GetClientConfigFromContext(harvesterContextName)
-	if err == nil {
-		return config, nil
-	}
-	fmt.Println("harvestEER")
 
 	coreDevClientConfig, err := clientcmd.NewNonInteractiveClientConfig(*o.configMap[coreDevDesiredContextName], coreDevDesiredContextName, nil, nil).ClientConfig()
 	if err != nil {

@@ -72,7 +72,7 @@ func GetClientConfigFromContext(context string) (*api.Config, error) {
 		return nil, err
 	}
 
-	if len(config.Contexts) == 0 {
+	if _, ok := config.Contexts[context]; !ok {
 		return nil, ErrContextNotExists
 	}
 

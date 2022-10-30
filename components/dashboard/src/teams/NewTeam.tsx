@@ -9,28 +9,40 @@ import { useHistory } from "react-router-dom";
 import { getGitpodService } from "../service/service";
 import { TeamsContext } from "./teams-context";
 import { teamsService } from "../service/public-api";
+import { getExperimentsClient } from "../experiments/client";
+import { UserContext } from "../user-context";
 
 export default function () {
     const { setTeams } = useContext(TeamsContext);
+    const { user } = useContext(UserContext);
     const history = useHistory();
 
     const [creationError, setCreationError] = useState<Error>();
     let name = "";
     const createTeam = async (event: FormEvent) => {
         event.preventDefault();
-        try {
-            const response = await teamsService.createTeam({
-                name,
-            });
-            const team = response.team;
-            setTeams(await getGitpodService().server.getTeams());
+        const isExperimentalTeamsServiceEnabled = await getExperimentsClient().getValueAsync(
+            "publicApiExperimentalTeamsService",
+            false,
+            {
+                user,
+            },
+        );
+        if (isExperimentalTeamsServiceEnabled) {
+            try {
+                const response = await teamsService.createTeam({ name });
+                const team = response.team;
+                setTeams(await getGitpodService().server.getTeams());
 
-            history.push(`/t/${team!.slug}`);
-            return;
-        } catch (error) {
-            console.error(error);
-            setCreationError(error);
+                history.push(`/t/${team!.slug}`);
+                return;
+            } catch (error) {
+                console.error(error);
+                setCreationError(error);
+                return;
+            }
         }
+
         try {
             const team = await getGitpodService().server.createTeam(name);
             const teams = await getGitpodService().server.getTeams();

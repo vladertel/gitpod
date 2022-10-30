@@ -22,6 +22,7 @@ import exclamation from "../images/exclamation.svg";
 import ErrorMessage from "../components/ErrorMessage";
 import Spinner from "../icons/Spinner.svg";
 import { teamsService } from "../service/public-api";
+import { getExperimentsClient } from "../experiments/client";
 
 export default function NewProject() {
     const location = useLocation();
@@ -722,6 +723,7 @@ function GitProviders(props: {
 
 function NewTeam(props: { onSuccess: (team: Team) => void }) {
     const { setTeams } = useContext(TeamsContext);
+    const { user } = useContext(UserContext);
 
     const [teamName, setTeamName] = useState<string | undefined>();
     const [error, setError] = useState<string | undefined>();
@@ -731,23 +733,34 @@ function NewTeam(props: { onSuccess: (team: Team) => void }) {
             return;
         }
 
-        try {
-            const response = await teamsService.createTeam({
-                name: teamName,
-            });
-            const team = response.team;
-            setTeams(await getGitpodService().server.getTeams());
+        const isExperimentalTeamsServiceEnabled = await getExperimentsClient().getValueAsync(
+            "publicApiExperimentalTeamsService",
+            false,
+            {
+                user,
+            },
+        );
+        if (isExperimentalTeamsServiceEnabled) {
+            try {
+                const response = await teamsService.createTeam({
+                    name: teamName,
+                });
+                const team = response.team;
+                setTeams(await getGitpodService().server.getTeams());
 
-            const mappedTeam: Team = {
-                id: team?.id || "",
-                name: team?.name || "",
-                slug: team?.slug || "",
-                creationTime: "",
-            };
-            props.onSuccess(mappedTeam);
-            return;
-        } catch (error) {
-            console.error(error);
+                const mappedTeam: Team = {
+                    id: team?.id || "",
+                    name: team?.name || "",
+                    slug: team?.slug || "",
+                    creationTime: "",
+                };
+                props.onSuccess(mappedTeam);
+                return;
+            } catch (error) {
+                console.error(error);
+                setError(error?.message || "Failed to create new team!");
+                return;
+            }
         }
 
         try {

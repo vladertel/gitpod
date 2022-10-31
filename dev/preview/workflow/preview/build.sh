@@ -69,16 +69,4 @@ leeway build \
     -Dversion="${VERSION}" \
     --dont-retag \
     --dont-test \
-    install/installer:docker
-
-# TODO: Hack - we need this to fetch the versions manifest - there might be a better way
-#       We could consider introducing a single leeway package which depends on install/installer:docker and components:docker-versions
-#       And any other packages we need.
-leeway build \
-    -DSEGMENT_IO_TOKEN="$(kubectl --context=dev -n werft get secret self-hosted -o jsonpath='{.data.segmentIOToken}' | base64 -d)" \
-    -DREPLICATED_API_TOKEN="$(kubectl --context=dev -n werft get secret replicated -o jsonpath='{.data.token}' | base64 -d)" \
-    -DREPLICATED_APP="$(kubectl --context=dev -n werft get secret replicated -o jsonpath='{.data.app}' | base64 -d)" \
-    -Dversion="${VERSION}" \
-    --dont-retag \
-    --dont-test \
-    components:docker-versions
+    dev/preview:deploy-dependencies

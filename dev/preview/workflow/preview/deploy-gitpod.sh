@@ -282,8 +282,6 @@ yq w -i "${INSTALLER_CONFIG_PATH}" experimental.ide.ideMetrics.enabledErrorRepor
 TRACING_ENDPOINT="http://otel-collector.monitoring-satellite.svc.cluster.local:14268/api/traces"
 yq w -i "${INSTALLER_CONFIG_PATH}" observability.tracing.endpoint "${TRACING_ENDPOINT}"
 
-log_success "Generated config at $INSTALLER_CONFIG_PATH"
-
 #
 # configureAuthProviders
 #
@@ -393,6 +391,8 @@ yq w -i "${INSTALLER_CONFIG_PATH}" "experimental.webapp.server.chargebeeSecret" 
 yq w -i "${INSTALLER_CONFIG_PATH}" "experimental.webapp.server.stripeSecret" "stripe-api-keys"
 yq w -i "${INSTALLER_CONFIG_PATH}" "experimental.webapp.server.stripeConfig" "stripe-config"
 
+log_success "Generated config at $INSTALLER_CONFIG_PATH"
+
 # ========
 # Validate
 # ========
@@ -490,13 +490,10 @@ rm -f "${INSTALLER_RENDER_PATH}"
 # Wait for pods to be ready
 # =========================
 waitUntilAllPodsAreReady "$PREVIEW_NAMESPACE"
-echo "Installation is happy: https://${DOMAIN}/workspaces"
 
 # =====================
 # Add agent smith token
 # =====================
-# TODO: Invoke addAgentSmithToke
-# process.env.KUBECONFIG = kubeconfigPath;
-# process.env.TOKEN = token;
-# setKubectlContextNamespace(namespace, {});
-# exec("leeway run components:add-smith-token");
+TOKEN=${GITPOD_AGENT_SMITH_TOKEN} leeway run components:add-smith-token
+
+log_success "Installation is happy: https://${DOMAIN}/workspaces"

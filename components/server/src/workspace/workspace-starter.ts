@@ -855,8 +855,6 @@ export class WorkspaceStarter {
                 );
             }
 
-            await this.tryEnableProtectedSecrets(featureFlags, user, billingTier);
-
             featureFlags = featureFlags.filter((f) => !excludeFeatureFlags.includes(f));
 
             await this.tryEnableConnectionLimiting(featureFlags, user, billingTier);
@@ -943,23 +941,6 @@ export class WorkspaceStarter {
             return instance;
         } finally {
             span.finish();
-        }
-    }
-
-    private async tryEnableProtectedSecrets(
-        featureFlags: NamedWorkspaceFeatureFlag[],
-        user: User,
-        billingTier: BillingTier,
-    ) {
-        if (
-            await getExperimentsClientForBackend().getValueAsync("protected_secrets", false, {
-                user,
-                billingTier,
-            })
-        ) {
-            // We roll out the protected secrets feature using a ConfigCat feature flag, to ensure
-            // a smooth, gradual roll out without breaking users.
-            featureFlags.push("protected_secrets");
         }
     }
 

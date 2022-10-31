@@ -14,6 +14,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/google/uuid"
 	log "github.com/sirupsen/logrus"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -107,14 +108,25 @@ func (fe *FakeExecutor) StopAll() error {
 	return nil
 }
 
-const loadgenAnnotation = "loadgen"
+const (
+	loadgenAnnotation      = "loadgen"
+	loadgenRunIdAnnotation = "loadgen-run-id"
+)
 
 // WsmanExecutor talks to a ws manager
 type WsmanExecutor struct {
 	C          api.WorkspaceManagerClient
 	Sub        []context.CancelFunc
+	runId      string
 	workspaces []string
 	mu         sync.Mutex
+}
+
+func NewWsmanExecutor(c api.WorkspaceManagerClient) *WsmanExecutor {
+	return &WsmanExecutor{
+		C:     c,
+		runId: uuid.New().String(),
+	}
 }
 
 // StartWorkspace starts a new workspace
@@ -126,6 +138,7 @@ func (w *WsmanExecutor) StartWorkspace(spec *StartWorkspaceSpec) (callDuration t
 
 	s := *spec
 	s.Metadata.Annotations[loadgenAnnotation] = "true"
+	s.Metadata.Annotations[loadgenRunIdAnnotation] = w.runId
 	ss := api.StartWorkspaceRequest(s)
 
 	t0 := time.Now()
@@ -148,7 +161,9 @@ func (w *WsmanExecutor) Observe() (<-chan WorkspaceUpdate, error) {
 	ctx, cancel := context.WithCancel(context.Background())
 	w.Sub = append(w.Sub, cancel)
 
-	sub, err := w.C.Subscribe(ctx, &api.SubscribeRequest{})
+	sub, err := w.C.Subscribe(ctx, &api.SubscribeRequest{
+		MustMatch: w.loadgenWorkspaceFilter(),
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -186,11 +201,7 @@ func (w *WsmanExecutor) StopAll(ctx context.Context) error {
 	}
 
 	listReq := api.GetWorkspacesRequest{
-		MustMatch: &api.MetadataFilter{
-			Annotations: map[string]string{
-				loadgenAnnotation: "true",
-			},
-		},
+		MustMatch: w.loadgenWorkspaceFilter(),
 	}
 
 	log.Infof("stopping %d workspaces", len(w.workspaces))
@@ -239,11 +250,7 @@ func (w *WsmanExecutor) Dump(path string) error {
 	defer cancel()
 
 	listReq := api.GetWorkspacesRequest{
-		MustMatch: &api.MetadataFilter{
-			Annotations: map[string]string{
-				loadgenAnnotation: "true",
-			},
-		},
+		MustMatch: w.loadgenWorkspaceFilter(),
 	}
 
 	resp, err := w.C.GetWorkspaces(ctx, &listReq)
@@ -271,6 +278,15 @@ func (w *WsmanExecutor) Dump(path string) error {
 		return err
 	}
 	return os.WriteFile(path, fc, 0644)
+}
+
+func (w *WsmanExecutor) loadgenWorkspaceFilter() *api.MetadataFilter {
+	return &api.MetadataFilter{
+		Annotations: map[string]string{
+			loadgenAnnotation:      "true",
+			loadgenRunIdAnnotation: w.runId,
+		},
+	}
 }
 
 type WorkspaceState struct {

@@ -118,8 +118,10 @@ var benchmarkCommand = &cobra.Command{
 
 		success := observer.NewSuccessObserver(scenario.SuccessRate)
 
+		resultsDir := "results/"
+
 		session := &loadgen.Session{
-			Executor: &loadgen.WsmanExecutor{C: api.NewWorkspaceManagerClient(conn)},
+			Executor: loadgen.NewWsmanExecutor(api.NewWorkspaceManagerClient(conn)),
 			// Executor: loadgen.NewFakeExecutor(),
 			Load: load,
 			Specs: &loadgen.MultiWorkspaceGenerator{

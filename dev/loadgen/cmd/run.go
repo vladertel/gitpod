@@ -118,7 +118,7 @@ var runCmd = &cobra.Command{
 		}
 		defer conn.Close()
 		client := api.NewWorkspaceManagerClient(conn)
-		executor := &loadgen.WsmanExecutor{C: client}
+		executor := loadgen.NewWsmanExecutor(client)
 
 		session := &loadgen.Session{
 			Executor: executor,

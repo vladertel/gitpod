@@ -18,9 +18,8 @@ PREVIEW_K3S_KUBE_PATH="${PREVIEW_K3S_KUBECONFIG_PATH:-/home/gitpod/.kube/config}
 PREVIEW_K3S_KUBE_CONTEXT="${PREVIEW_K3S_KUBE_CONTEXT:-$PREVIEW_NAME}"
 PREVIEW_NAMESPACE="default"
 
-# TODO: Figure out why Leeway doesn't like this.
-# GITPOD_AGENT_SMITH_TOKEN="$(tr -dc 'A-Fa-f0-9' < /dev/urandom | head -c61)"
-GITPOD_AGENT_SMITH_TOKEN="57B8fdFD68442a37E18B22bFD83638D451E087A047Eb4e4BF8BCc3EdF5825"
+GITPOD_AGENT_SMITH_TOKEN="$(openssl rand -hex 30)"
+GITPOD_AGENT_SMITH_TOKEN_HASH="$(echo -n "$GITPOD_AGENT_SMITH_TOKEN" | sha256sum - | tr -d '  -')"
 GITPOD_CONTAINER_REGISTRY_URL="eu.gcr.io/gitpod-core-dev/build/";
 GITPOD_IMAGE_PULL_SECRET_NAME="gcp-sa-registry-auth";
 GITPOD_PROXY_SECRET_NAME="proxy-config-certificates";
@@ -399,9 +398,6 @@ log_success "Generated config at $INSTALLER_CONFIG_PATH"
 
 installer validate config --config "$INSTALLER_CONFIG_PATH"
 
-# TODO: This doesn't support separate kubeconfig and kubectx yet so we need to find a way around that
-# installer validate cluster --kubeconfig "${PREVIEW_K3S_KUBE_PATH}" --config "${INSTALLER_CONFIG_PATH}"
-
 # ========
 # Render
 # ========
@@ -494,6 +490,6 @@ waitUntilAllPodsAreReady "$PREVIEW_NAMESPACE"
 # =====================
 # Add agent smith token
 # =====================
-TOKEN=${GITPOD_AGENT_SMITH_TOKEN} leeway run components:add-smith-token
+TOKEN=${GITPOD_AGENT_SMITH_TOKEN_HASH} leeway run components:add-smith-token
 
 log_success "Installation is happy: https://${DOMAIN}/workspaces"

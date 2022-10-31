@@ -275,7 +275,7 @@ scripts:
           --context "${PREVIEW_K3S_KUBE_CONTEXT}" \
           --namespace "${PREVIEW_NAMESPACE}" \
           get secrets mysql -o jsonpath="{.data.username}" \
-        | base64 -d\
+        | base64 -d \
       )
       export DB_PASSWORD=$(\
         kubectl \

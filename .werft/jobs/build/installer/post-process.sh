@@ -11,7 +11,7 @@ set -euo pipefail
 # Node pool index was only relevant with core-dev
 NODE_POOL_INDEX=0
 
-# TODO: There we previously using "findLastPort" etc. but I think it's okay to hardcode them now
+# These were previously using "findLastPort" etc. but in harvester-based preview environments they can be stable
 REG_DAEMON_PORT="30000"
 WS_DAEMON_PORT="10000"
 

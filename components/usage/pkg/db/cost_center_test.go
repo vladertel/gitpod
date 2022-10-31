@@ -58,6 +58,75 @@ func TestCostCenterManager_GetOrCreateCostCenter(t *testing.T) {
 	require.Equal(t, int32(500), userCC.SpendingLimit)
 }
 
+func TestCostCenterManager_GetOrCreateCostCenter_ResetsExpired(t *testing.T) {
+	conn := dbtest.ConnectForTests(t)
+	mnr := db.NewCostCenterManager(conn, db.DefaultSpendingLimit{
+		ForTeams: 0,
+		ForUsers: 500,
+	})
+
+	now := time.Now().UTC()
+	ts := time.Date(now.Year(), now.Month(), now.Day(), now.Hour(), now.Minute(), now.Second(), 0, time.UTC)
+	expired := ts.Add(-1 * time.Minute)
+	unexpired := ts.Add(1 * time.Minute)
+
+	expiredCC := db.CostCenter{
+		ID:              db.NewTeamAttributionID(uuid.New().String()),
+		CreationTime:    db.NewVarcharTime(now),
+		SpendingLimit:   0,
+		BillingStrategy: db.CostCenter_Other,
+		NextBillingTime: db.NewVarcharTime(expired),
+	}
+	unexpiredCC := db.CostCenter{
+		ID:              db.NewUserAttributionID(uuid.New().String()),
+		CreationTime:    db.NewVarcharTime(now),
+		SpendingLimit:   500,
+		BillingStrategy: db.CostCenter_Other,
+		NextBillingTime: db.NewVarcharTime(unexpired),
+	}
+	// Stripe billing strategy should not be reset
+	stripeCC := db.CostCenter{
+		ID:              db.NewUserAttributionID(uuid.New().String()),
+		CreationTime:    db.NewVarcharTime(now),
+		SpendingLimit:   0,
+		BillingStrategy: db.CostCenter_Stripe,
+		NextBillingTime: db.VarcharTime{},
+	}
+
+	dbtest.CreateCostCenters(t, conn,
+		dbtest.NewCostCenter(t, expiredCC),
+		dbtest.NewCostCenter(t, unexpiredCC),
+		dbtest.NewCostCenter(t, stripeCC),
+	)
+
+	// expired CostCenter should be reset, so we get a new CreationTime
+	retrievedExpiredCC, err := mnr.GetOrCreateCostCenter(context.Background(), expiredCC.ID)
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		conn.Model(&db.CostCenter{}).Delete(retrievedExpiredCC.ID)
+	})
+	require.Equal(t, db.NewVarcharTime(expired).Time().AddDate(0, 1, 0), retrievedExpiredCC.NextBillingTime.Time())
+	require.Equal(t, expiredCC.ID, retrievedExpiredCC.ID)
+	require.Equal(t, expiredCC.BillingStrategy, retrievedExpiredCC.BillingStrategy)
+	require.WithinDuration(t, now, expiredCC.CreationTime.Time(), 3*time.Second, "new cost center creation time must be within 3 seconds of now")
+
+	// unexpired cost center must not be reset
+	retrievedUnexpiredCC, err := mnr.GetOrCreateCostCenter(context.Background(), unexpiredCC.ID)
+	require.NoError(t, err)
+	require.Equal(t, db.NewVarcharTime(unexpired).Time(), retrievedUnexpiredCC.NextBillingTime.Time())
+	require.Equal(t, unexpiredCC.ID, retrievedUnexpiredCC.ID)
+	require.Equal(t, unexpiredCC.BillingStrategy, retrievedUnexpiredCC.BillingStrategy)
+	require.WithinDuration(t, unexpiredCC.CreationTime.Time(), retrievedUnexpiredCC.CreationTime.Time(), 100*time.Millisecond)
+
+	// stripe cost center must not be reset
+	retrievedStripeCC, err := mnr.GetOrCreateCostCenter(context.Background(), stripeCC.ID)
+	require.NoError(t, err)
+	require.False(t, retrievedStripeCC.NextBillingTime.IsSet())
+	require.Equal(t, stripeCC.ID, retrievedStripeCC.ID)
+	require.Equal(t, stripeCC.BillingStrategy, retrievedStripeCC.BillingStrategy)
+	require.WithinDuration(t, stripeCC.CreationTime.Time(), retrievedStripeCC.CreationTime.Time(), 100*time.Millisecond)
+}
+
 func TestCostCenterManager_UpdateCostCenter(t *testing.T) {
 	conn := dbtest.ConnectForTests(t)
 	limits := db.DefaultSpendingLimit{

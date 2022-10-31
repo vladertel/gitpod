@@ -36,8 +36,16 @@ type CostCenter struct {
 }
 
 // TableName sets the insert table name for this struct type
-func (d *CostCenter) TableName() string {
+func (c *CostCenter) TableName() string {
 	return "d_b_cost_center"
+}
+
+func (c *CostCenter) IsExpired() bool {
+	if !c.NextBillingTime.IsSet() {
+		return false
+	}
+
+	return c.NextBillingTime.Time().Before(time.Now().UTC())
 }
 
 type DefaultSpendingLimit struct {
@@ -62,6 +70,7 @@ type CostCenterManager struct {
 // This method creates a codt center and stores it in the DB if there is no preexisting one.
 func (c *CostCenterManager) GetOrCreateCostCenter(ctx context.Context, attributionID AttributionID) (CostCenter, error) {
 	logger := log.WithField("attributionId", attributionID)
+	now := time.Now().UTC()
 
 	result, err := getCostCenter(ctx, c.conn, attributionID)
 	if err != nil {
@@ -73,18 +82,29 @@ func (c *CostCenterManager) GetOrCreateCostCenter(ctx context.Context, attributi
 			}
 			result = CostCenter{
 				ID:              attributionID,
-				CreationTime:    NewVarcharTime(time.Now()),
+				CreationTime:    NewVarcharTime(now),
 				BillingStrategy: CostCenter_Other,
 				SpendingLimit:   defaultSpendingLimit,
-				NextBillingTime: NewVarcharTime(time.Now().AddDate(0, 1, 0)),
+				NextBillingTime: NewVarcharTime(now.AddDate(0, 1, 0)),
 			}
 			err := c.conn.Save(&result).Error
 			if err != nil {
 				return CostCenter{}, err
 			}
+			return result, nil
 		} else {
 			return CostCenter{}, err
 		}
+	}
+
+	if result.BillingStrategy == CostCenter_Other && result.IsExpired() {
+		cc, err := c.ResetUsage(ctx, result)
+		if err != nil {
+			logger.WithError(err).Error("Failed to reset expired usage.")
+			return CostCenter{}, fmt.Errorf("failed to reset usage for expired cost center ID: %s: %w", result.ID, err)
+		}
+
+		return cc, nil
 	}
 
 	return result, nil

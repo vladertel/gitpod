@@ -236,7 +236,7 @@ func (s *UsageService) SetCostCenter(ctx context.Context, in *v1.SetCostCenterRe
 	}, nil
 }
 
-func (s UsageService) ResetUsage(ctx context.Context, req *v1.ResetUsageRequest) (*v1.ResetUsageResponse, error) {
+func (s *UsageService) ResetUsage(ctx context.Context, req *v1.ResetUsageRequest) (*v1.ResetUsageResponse, error) {
 	now := time.Now()
 	costCentersToUpdate, err := s.costCenterManager.ListLatestCostCentersWithBillingTimeBefore(ctx, db.CostCenter_Other, now)
 	if err != nil {

@@ -97,6 +97,10 @@ func (c *CostCenterManager) GetOrCreateCostCenter(ctx context.Context, attributi
 		}
 	}
 
+	// If we retrieved a CostCenter which is not on Stripe, and the NextBillingPeriod is expired,
+	// we want to reset it immediately.
+	// This can happen in the following scenario:
+	//	* User accesses gitpod just after their CostCenter expired, but just before our periodic CostCenter reset kicks in.
 	if result.BillingStrategy == CostCenter_Other && result.IsExpired() {
 		cc, err := c.ResetUsage(ctx, result)
 		if err != nil {
